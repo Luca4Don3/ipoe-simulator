@@ -41,7 +41,7 @@ Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧�
 
 需要 Python 3.10+ 和 Scapy 2.5+。遗留 Linux 固定使用部署 runtime 中的 Python 3.11。
 
-- Windows 要求管理员权限，最优先建议使用 PowerShell 7（`pwsh`）；运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、校验 Authenticode 签名后静默安装。
+- Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装时回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
 - macOS/Linux 要求 `sudo/root`，程序不会自动提权。
 - macOS 使用系统网络工具与系统 `libpcap/BPF`。
 - Linux 使用 PF_PACKET；过滤器编译依赖 `tcpdump`。

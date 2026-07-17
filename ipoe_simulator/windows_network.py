@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import base64
-import json
 import os
-import subprocess
-from pathlib import Path
 from typing import Any
 
 from .interfaces import InterfaceInfo
 from .network_backend import NetworkBackend, NetworkStateError
+from .powershell_runtime import get_powershell_runtime
 
 
 def _require_windows() -> None:
@@ -18,33 +15,11 @@ def _require_windows() -> None:
 
 def _run_powershell(script: str, timeout: int = 45, expect_json: bool = False) -> Any:
     _require_windows()
-    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-    try:
-        result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoLogo",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-EncodedCommand",
-                encoded,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise NetworkStateError(f"PowerShell 执行失败: {exc}") from exc
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "未知 PowerShell 错误").strip()
-        raise NetworkStateError(f"PowerShell 返回 {result.returncode}: {detail}")
-    output = result.stdout.strip()
+    output = get_powershell_runtime().run(script, timeout=timeout)
     if not expect_json:
         return output
     try:
+        import json
         return json.loads(output)
     except json.JSONDecodeError as exc:
         raise NetworkStateError(f"PowerShell 未返回有效 JSON: {output[:300]}") from exc
