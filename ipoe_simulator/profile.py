@@ -16,6 +16,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "capture": {"pcap_file": "", "duration": 30},
     "network": {"subnet_mask": "", "gateway": "", "dns": []},
     "behavior": {"auto_renew": True, "restore_on_exit": True},
+    "logging": {"directory": ""},
 }
 
 
@@ -142,6 +143,17 @@ class Config:
                 current[key] = child
             current = child
         current[keys[-1]] = value
+
+    def log_directory(self, project_root: str | os.PathLike[str]) -> Path:
+        value = self.get("logging", "directory", default="")
+        if value in (None, ""):
+            return Path(project_root).resolve()
+        if not isinstance(value, str):
+            raise ConfigError("logging.directory 必须是字符串路径")
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = Path(project_root) / path
+        return path.resolve()
 
     def merge_extracted(self, extracted: dict[str, Any], pcap_path: str) -> None:
         if extracted.get("mac"):
