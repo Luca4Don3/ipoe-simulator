@@ -286,20 +286,17 @@ def npcap_status() -> tuple[bool, str]:
 
 
 def _authenticode_valid(path: Path) -> bool:
-    encoded = __import__("base64").b64encode(
-        (
-            "$ErrorActionPreference='Stop'; "
-            f"(Get-AuthenticodeSignature -LiteralPath '{str(path).replace(chr(39), chr(39) * 2)}').Status"
-        ).encode("utf-16-le")
-    ).decode("ascii")
-    result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    from .powershell_runtime import get_powershell_runtime
+    from .network_backend import NetworkStateError
+
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f"(Get-AuthenticodeSignature -LiteralPath '{str(path).replace(chr(39), chr(39) * 2)}').Status"
     )
-    return result.returncode == 0 and result.stdout.strip().lower() == "valid"
+    try:
+        return get_powershell_runtime().run(script, timeout=30).lower() == "valid"
+    except NetworkStateError as exc:
+        raise DependencyError(f"Npcap Authenticode 校验执行失败: {exc}") from exc
 
 
 def install_npcap() -> str:

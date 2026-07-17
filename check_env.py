@@ -24,6 +24,7 @@ from ipoe_simulator.dependencies import (
 )
 from ipoe_simulator.interfaces import InterfaceError, list_interfaces
 from ipoe_simulator.platform_network import default_state_directory
+from ipoe_simulator.powershell_runtime import powershell_status
 
 
 ROOT = Path(__file__).resolve().parent
@@ -50,8 +51,17 @@ def _platform_checks(checks: dict[str, object]) -> bool:
             checks["architecture_error"] = str(exc)
             ok = False
         checks["network_manager"] = "Windows NetTCPIP/PowerShell"
-        checks["powershell"] = shutil.which("powershell.exe") or False
-        if not checks["powershell"]:
+        try:
+            powershell = powershell_status()
+            checks["powershell"] = powershell["executable"]
+            checks["powershell_version"] = powershell["version"]
+            checks["powershell_edition"] = powershell["edition"]
+            checks["powershell_5_1_fallback"] = powershell[
+                "is_powershell_5_1_fallback"
+            ]
+        except Exception as exc:
+            checks["powershell"] = False
+            checks["powershell_error"] = str(exc)
             ok = False
     elif sys.platform == "darwin":
         status = macos_status()
