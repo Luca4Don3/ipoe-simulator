@@ -1,0 +1,15 @@
+IPoE Simulator portable Windows packages include:
+
+Python 3.11.9
+Copyright (c) 2001-2024 Python Software Foundation.
+Python is distributed under the Python Software Foundation License Version 2.
+The complete license is included at runtime/LICENSE.txt in each package.
+https://www.python.org/
+
+Scapy 2.6.1
+Copyright (C) Philippe Biondi and the Scapy project contributors.
+Scapy is distributed under GPL-2.0-only.
+The license notice is included in licenses/SCAPY-LICENSE.txt.
+https://scapy.net/
+
+IPoE Simulator project source is licensed under GPL-3.0-only; see LICENSE.

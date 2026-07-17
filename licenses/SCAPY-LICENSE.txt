@@ -1,0 +1,10 @@
+Scapy 2.6.1 is distributed under the GNU General Public License,
+version 2 only (GPL-2.0-only), with the exception stated by Scapy's
+upstream project where applicable.
+
+Copyright (C) Philippe Biondi and the Scapy project contributors.
+
+The complete license text is available from the Free Software Foundation:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+Upstream project: https://github.com/secdev/scapy
