@@ -36,6 +36,14 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(loaded.get("dhcp_options", "option60"), "STB")
             json.loads(path.read_text(encoding="utf-8"))
 
+    def test_log_directory_defaults_to_project_root_and_accepts_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = Config(root / "config.json")
+            self.assertEqual(config.log_directory(root), root.resolve())
+            config.set("logs", "logging", "directory")
+            self.assertEqual(config.log_directory(root), (root / "logs").resolve())
+
     def test_restore_cannot_be_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Config(Path(directory) / "config.json")

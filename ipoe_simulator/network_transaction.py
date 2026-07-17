@@ -12,11 +12,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .app_logging import get_logger
 from .interfaces import InterfaceInfo
 from .network_backend import NetworkBackend, NetworkStateError
 
 
 JOURNAL_SCHEMA = 2
+LOGGER = get_logger("transaction")
 
 
 def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
@@ -94,6 +96,7 @@ def restore_from_journal(
     path = Path(journal_path).resolve()
     if not path.exists():
         return
+    LOGGER.info("检测到待恢复日志 journal=%s", path)
     journal = _read_journal(path)
     selected = backend or _default_backend()
     schema = journal.get("schema", 1)
@@ -108,6 +111,12 @@ def restore_from_journal(
     journal["status"] = "restoring"
     journal["updated_at"] = int(time.time())
     atomic_write_json(path, journal)
+    LOGGER.info(
+        "恢复开始 platform=%s interface_index=%s journal=%s",
+        selected.platform_name,
+        interface.index,
+        path,
+    )
     try:
         selected.restore(interface, snapshot)
         current = selected.capture_snapshot(interface)
@@ -118,14 +127,18 @@ def restore_from_journal(
         journal["updated_at"] = int(time.time())
         atomic_write_json(path, journal)
         if isinstance(exc, NetworkStateError):
+            LOGGER.critical("恢复失败，网卡状态可能未恢复 error=%s journal=%s", exc, path)
             raise
+        LOGGER.critical("恢复失败，网卡状态可能未恢复 error=%s journal=%s", exc, path)
         raise NetworkStateError(f"恢复执行失败: {exc}") from exc
     if errors:
         journal["status"] = "restore_failed"
         journal["restore_errors"] = errors
         journal["updated_at"] = int(time.time())
         atomic_write_json(path, journal)
+        LOGGER.critical("恢复校验失败，网卡状态可能未恢复 errors=%s journal=%s", errors, path)
         raise NetworkStateError("; ".join(errors))
+    LOGGER.info("恢复成功并删除日志 journal=%s", path)
     path.unlink(missing_ok=True)
 
 
@@ -153,6 +166,12 @@ class NetworkTransaction:
             )
         selected = backend or _default_backend()
         path = Path(journal_path).resolve()
+        LOGGER.info(
+            "事务开始 platform=%s interface_index=%s journal=%s",
+            selected.platform_name,
+            interface.index,
+            path,
+        )
         if path.exists():
             restore_from_journal(path, backend=selected)
         snapshot = selected.capture_snapshot(interface)
@@ -192,6 +211,13 @@ class NetworkTransaction:
                 "interface": self.interface.to_dict(),
                 "snapshot": self.snapshot,
             },
+        )
+        LOGGER.debug(
+            "事务状态 status=%s platform=%s interface_index=%s journal=%s",
+            status,
+            self.backend.platform_name,
+            self.interface.index,
+            self.journal_path,
         )
 
     def _start_watchdog(self) -> None:
@@ -248,6 +274,14 @@ class NetworkTransaction:
         gateway: str | None,
         dns_servers: list[str],
     ) -> None:
+        LOGGER.info(
+            "事务应用租约 interface_index=%s ip=%s subnet_mask=%s gateway=%s dns_servers=%s",
+            self.interface.index,
+            ip_address,
+            subnet_mask,
+            gateway or "-",
+            ",".join(dns_servers) or "-",
+        )
         self.app_ip = ip_address
         self._write("lease_received")
         self.backend.apply_lease(
@@ -261,6 +295,11 @@ class NetworkTransaction:
         self._write("lease_applied")
 
     def restore(self) -> None:
+        LOGGER.info(
+            "事务恢复请求 interface_index=%s journal=%s",
+            self.interface.index,
+            self.journal_path,
+        )
         try:
             if self.journal_path.exists():
                 restore_from_journal(self.journal_path, backend=self.backend)

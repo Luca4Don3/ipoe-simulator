@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
 from ipoe_simulator.profile import Config, ConfigError, DEFAULT_CONFIG, OPTION_CODES
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = ROOT / "ipoedhcp_config.json"
+LOGGER = get_logger("coordinator")
 
 
 class CoordinatorError(RuntimeError):
@@ -22,10 +25,12 @@ def run_script(script: str, args: list[str], description: str) -> None:
     path = ROOT / script
     if not path.exists():
         raise CoordinatorError(f"脚本不存在: {path}")
-    print(description)
+    LOGGER.info("子流程开始 script=%s description=%s", script, description)
     result = subprocess.run([sys.executable, "-u", str(path), *args], cwd=ROOT, check=False)
     if result.returncode != 0:
+        LOGGER.error("子流程失败 script=%s returncode=%s", script, result.returncode)
         raise CoordinatorError(f"{script} 失败，退出码 {result.returncode}")
+    LOGGER.info("子流程完成 script=%s", script)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -44,6 +49,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--show", action="store_true")
     p.add_argument("--reset", action="store_true")
     p.add_argument("--interactive", "-i", action="store_true")
+    p.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return p
 
 
@@ -125,13 +131,21 @@ def interactive(config: Config) -> int:
             elif choice == "0":
                 return 0
         except (ValueError, CoordinatorError, ConfigError) as exc:
-            print(f"错误: {exc}", file=sys.stderr)
+            LOGGER.error("交互流程失败 error=%s", exc)
 
 
 def main() -> int:
     args = parser().parse_args()
+    logging_ready = False
+    if args.log_level:
+        os.environ["IPOE_LOG_LEVEL"] = args.log_level
     try:
         config = Config(args.config)
+        configure_logging(
+            level_name=args.log_level,
+            log_directory=config.log_directory(ROOT),
+        )
+        logging_ready = True
         if args.reset:
             config.data = json.loads(json.dumps(DEFAULT_CONFIG))
             config.save()
@@ -159,7 +173,9 @@ def main() -> int:
                 do_dhcp(config)
         return 0
     except (CoordinatorError, ConfigError, ValueError) as exc:
-        print(f"流程失败: {exc}", file=sys.stderr)
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+        LOGGER.error("流程失败 error=%s", exc)
         return 6
 
 
