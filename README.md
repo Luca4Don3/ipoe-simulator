@@ -12,9 +12,9 @@
 
 普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
 
-- `ipoe-simulator-v0.1.0-windows-x86.zip`
-- `ipoe-simulator-v0.1.0-windows-x64.zip`
-- `ipoe-simulator-v0.1.0-windows-arm64.zip`
+- `ipoe-simulator-v0.1.1-windows-x86.zip`
+- `ipoe-simulator-v0.1.1-windows-x64.zip`
+- `ipoe-simulator-v0.1.1-windows-arm64.zip`
 
 使用同一 Release 中的 `SHA256SUMS.txt` 校验下载文件。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy，只提供 `run.cmd`，不包含 `run.sh`。Npcap 不随包分发，仍从官方地址下载并在安装前校验 Authenticode 签名。
 

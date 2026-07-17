@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$Utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
 [Console]::InputEncoding = $Utf8NoBom
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
