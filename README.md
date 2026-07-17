@@ -2,17 +2,11 @@
 
 跨平台 IPoE DHCP 模拟器，支持 Windows、macOS 和 Linux。
 
-Cross-platform IPoE DHCP simulator for Windows, macOS, and Linux.
-
 这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
 当前发布状态是“已实现、仅完成离线模拟验证、未完成对应平台实机验证”，不能据此声明生产可用。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
-
-This project is a CLI-only DHCPv4/IPoE simulator. Windows is the primary platform, while the source also includes network transaction backends for macOS and Linux. Existing CLI arguments, JSON configuration, and the DHCP state machine remain compatible.
-
-It provides a repeatable tool for IPoE access testing on carrier iTV interfaces, including access-flow validation, DHCP parameter verification, network-interface state recovery, troubleshooting, and set-top-box replacement testing. The current release has been validated through offline simulation only; corresponding real-device platform validation is still pending and the project should not be considered production-ready. It does not modify IPv6, provide a GUI, install a boot service, recover a machine while it is powered off, or play IPTV content.
 
 ## 支持平台
 
