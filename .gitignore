@@ -3,4 +3,5 @@ __pycache__/
 .temp/
 .venv/
 ipoedhcp_config.json
+HANDOFF.md
 *.log
