@@ -79,6 +79,10 @@ New-Item `
 Copy-Item `
     -LiteralPath (Join-Path $PSScriptRoot 'windows_launcher.ps1') `
     -Destination (Join-Path $PackageDirectory 'scripts\windows_launcher.ps1')
+New-Item -ItemType Directory -Path (Join-Path $PackageDirectory 'licenses') -Force | Out-Null
+Copy-Item `
+    -LiteralPath (Join-Path $RootDirectory 'licenses\SCAPY-LICENSE.txt') `
+    -Destination (Join-Path $PackageDirectory 'licenses\SCAPY-LICENSE.txt')
 
 if (-not (Test-Path -LiteralPath $PythonArchive -PathType Leaf)) {
     Write-Host "下载 Python $PythonVersion $Architecture`: $PythonUrl"
