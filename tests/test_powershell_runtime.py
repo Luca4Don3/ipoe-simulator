@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ipoe_simulator.network_backend import NetworkStateError
 from ipoe_simulator.powershell_runtime import get_powershell_runtime
+from ipoe_simulator.powershell_runtime import _candidate_paths
 
 
 def _version_result(major: int, minor: int, patch_level: int, edition: str = "Core"):
@@ -103,6 +104,21 @@ class PowerShellRuntimeTests(unittest.TestCase):
         encoded = run.call_args.args[0][-1]
         script = base64.b64decode(encoded).decode("utf-16-le")
         self.assertIn("UTF8Encoding", script)
+
+    @patch("ipoe_simulator.powershell_runtime.os.path.isfile", return_value=True)
+    @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value=None)
+    @patch.dict(
+        "ipoe_simulator.powershell_runtime.os.environ",
+        {"LOCALAPPDATA": r"C:\Users\tester\AppData\Local"},
+        clear=True,
+    )
+    def test_finds_per_user_powershell_7_path(self, _which, _isfile) -> None:
+        candidates = _candidate_paths("pwsh.exe")
+        normalized = {path.replace("/", "\\") for path in candidates}
+        self.assertIn(
+            r"C:\Users\tester\AppData\Local\Microsoft\PowerShell\7\pwsh.exe",
+            normalized,
+        )
 
 
 if __name__ == "__main__":
