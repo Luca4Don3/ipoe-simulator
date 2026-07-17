@@ -1,18 +1,30 @@
 # IPoE Simulator
 
-面向 Windows 的 IPoE DHCP 模拟器；macOS 和 Linux 已完成代码适配。
+正式支持 Windows 的 IPoE DHCP 模拟器；macOS 和 Linux 仅完成代码适配，不发布平台附件。
 
 这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-当前发布状态是“已实现、仅完成离线模拟验证、未完成对应平台实机验证”，不能据此声明生产可用。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+当前发布状态不能据此声明生产可用。x64 Release 候选包需要在普通 Windows 11 上完成双击实测；x86 尚未完成对应硬件实机验证，ARM64 仅完成架构和静态完整性验证。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
-## 支持平台
+## 下载
 
-- Windows 10 x86；
-- Windows 10/11 x64；
-- Windows 10/11 ARM64；
+普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
+
+- `ipoe-simulator-v0.1.0-windows-x86.zip`
+- `ipoe-simulator-v0.1.0-windows-x64.zip`
+- `ipoe-simulator-v0.1.0-windows-arm64.zip`
+
+使用同一 Release 中的 `SHA256SUMS.txt` 校验下载文件。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy，只提供 `run.cmd`，不包含 `run.sh`。Npcap 不随包分发，仍从官方地址下载并在安装前校验 Authenticode 签名。
+
+GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 无法关闭，仅供开发者使用，不包含便携运行时；普通用户应下载上述平台附件。
+
+## 代码适配范围
+
+- Windows 10 x86（正式支持，尚未实机验证）；
+- Windows 10/11 x64（正式支持）；
+- Windows 10/11 ARM64（正式支持，仅完成静态验证）；
 - macOS 14、15、26，Intel x86_64 与 Apple Silicon；
 - RHEL/CentOS 6.5+；
 - Ubuntu 12.04 LTS+；
@@ -98,7 +110,7 @@ Windows 可运行 `run.cmd`；macOS/Linux 可运行 `sudo ./run.sh` 进入统筹
 - Windows 三架构及 macOS/Linux 支持平台静态检查；
 - CLI 与 JSON 配置兼容检查。
 
-发布前仍必须在 Windows 10/11、macOS 14/15/26，以及各最低版本和现代 Linux 管理器路径上验证正常 Stop、Ctrl+C、DHCP 失败和进程异常后的地址、路由、DNS、DHCP 模式与管理器状态恢复。
+Windows Release 发布前仍必须在目标 Windows 环境验证正常 Stop、Ctrl+C、DHCP 失败和进程异常后的地址、路由、DNS、DHCP 模式与管理器状态恢复。macOS/Linux 只做代码适配和离线回归，不发布平台附件。
 
 ## 致谢
 
