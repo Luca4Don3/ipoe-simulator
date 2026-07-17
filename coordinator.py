@@ -136,11 +136,16 @@ def interactive(config: Config) -> int:
 
 def main() -> int:
     args = parser().parse_args()
+    logging_ready = False
     if args.log_level:
         os.environ["IPOE_LOG_LEVEL"] = args.log_level
-    configure_logging(level_name=args.log_level)
     try:
         config = Config(args.config)
+        configure_logging(
+            level_name=args.log_level,
+            log_directory=config.log_directory(ROOT),
+        )
+        logging_ready = True
         if args.reset:
             config.data = json.loads(json.dumps(DEFAULT_CONFIG))
             config.save()
@@ -168,6 +173,8 @@ def main() -> int:
                 do_dhcp(config)
         return 0
     except (CoordinatorError, ConfigError, ValueError) as exc:
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("流程失败 error=%s", exc)
         return 6
 

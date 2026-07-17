@@ -5,18 +5,23 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 
 
 LOGGER_NAME = "ipoe-simulator"
 LOG_LEVELS = ("DEBUG", "INFO")
+LOG_FILE_NAME = "ipoe-simulator.log"
 _FORMAT = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def configure_logging(
-    *, level_name: str | None = None, verbose: bool = False
+    *,
+    level_name: str | None = None,
+    log_directory: str | os.PathLike[str] | None = None,
+    verbose: bool = False,
 ) -> None:
-    """将应用日志统一写入 stderr，默认只输出 INFO 及以上业务事件。"""
+    """将应用日志写入 stderr 和指定目录的 UTF-8 日志文件。"""
 
     selected = level_name or os.environ.get(
         "IPOE_LOG_LEVEL", "DEBUG" if verbose else "INFO"
@@ -28,11 +33,23 @@ def configure_logging(
     if not isinstance(level, int):
         level = logging.INFO
     logger = logging.getLogger(LOGGER_NAME)
-    logger.handlers.clear()
+    for existing in logger.handlers[:]:
+        logger.removeHandler(existing)
+        existing.close()
     logger.setLevel(level)
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATE_FORMAT))
-    logger.addHandler(handler)
+    formatter = logging.Formatter(_FORMAT, datefmt=_DATE_FORMAT)
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    if log_directory is not None:
+        directory = Path(log_directory).expanduser().resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(
+            directory / LOG_FILE_NAME,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
     logger.propagate = False
 
 

@@ -28,16 +28,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    configure_logging(level_name=args.log_level)
+    logging_ready = False
     try:
-        ensure_scapy(auto_install=True)
-        result = extract_profile(args.pcap, args.stb_mac)
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+        config: Config | None = None
         if args.json_path:
             config_path = Path(args.json_path)
             if not config_path.is_absolute():
                 config_path = ROOT / config_path
             config = Config(config_path)
+        configure_logging(
+            level_name=args.log_level,
+            log_directory=config.log_directory(ROOT) if config else ROOT,
+        )
+        logging_ready = True
+        ensure_scapy(auto_install=True)
+        result = extract_profile(args.pcap, args.stb_mac)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        if config is not None:
             config.merge_extracted(result, args.pcap)
             config.save()
             LOGGER.info("配置已保存 path=%s", config.path)
@@ -51,6 +58,8 @@ def main() -> int:
         LOGGER.info("直接运行命令: %s", subprocess.list2cmdline(command))
         return 0
     except (ExtractError, ConfigError, OSError) as exc:
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("参数提取失败 error=%s", exc)
         return 3
 

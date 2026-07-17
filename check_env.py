@@ -253,7 +253,7 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     args = parser.parse_args()
-    configure_logging(level_name=args.log_level)
+    configure_logging(level_name=args.log_level, log_directory=ROOT)
     ok, checks = run()
     if args.json:
         print(json.dumps(checks, indent=2, ensure_ascii=False))

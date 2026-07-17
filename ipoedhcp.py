@@ -130,24 +130,35 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
 
 def main() -> int:
     args = build_parser().parse_args()
-    configure_logging(level_name=args.log_level)
+    logging_ready = False
     try:
+        config = Config(args.config)
+        configure_logging(
+            level_name=args.log_level,
+            log_directory=config.log_directory(ROOT),
+        )
+        logging_ready = True
         if args.list_interfaces:
             for interface in list_interfaces(include_virtual=True):
                 print(interface.display())
             return 0
-        config = Config(args.config)
         _apply_arguments(config, args)
         if args.capture_only is not None:
             return _run_capture(config, args)
         return _run_dhcp(config, args)
     except (ConfigError, InterfaceError) as exc:
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("参数错误 error=%s", exc)
         return 2
     except CaptureError as exc:
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("抓包失败 error=%s", exc)
         return 3
     except (NetworkStateError, DependencyError) as exc:
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("网络错误 error=%s", exc)
         return 5
 
