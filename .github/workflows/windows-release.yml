@@ -28,6 +28,20 @@ jobs:
           python -m compileall -q .
           git diff --check
 
+  powershell-51-compatibility:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse launcher with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $launcher = Join-Path $PWD 'scripts/windows_launcher.ps1'
+          $null = [scriptblock]::Create([IO.File]::ReadAllText($launcher))
+          if (-not (Test-Path -LiteralPath (Join-Path $PWD 'run.cmd'))) {
+            throw 'run.cmd 不存在'
+          }
+          Write-Output 'Windows PowerShell 5.1 launcher syntax OK'
+
   metadata:
     runs-on: ubuntu-latest
     outputs:
