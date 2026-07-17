@@ -9,7 +9,7 @@ https://www.python.org/
 Scapy 2.6.1
 Copyright (C) Philippe Biondi and the Scapy project contributors.
 Scapy is distributed under GPL-2.0-only.
-The complete license is included in runtime/Lib/site-packages/scapy-2.6.1.dist-info/licenses/LICENSE.
+The license notice is included in licenses/SCAPY-LICENSE.txt.
 https://scapy.net/
 
 IPoE Simulator project source is licensed under GPL-3.0-only; see LICENSE.
