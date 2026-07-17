@@ -1,14 +1,9 @@
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]] $LauncherArguments
-)
-
 $ErrorActionPreference = 'Stop'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $Utf8NoBom
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
+$LauncherArguments = @($args)
 
 $RootDirectory = Split-Path -Parent $PSScriptRoot
 $LogPath = Join-Path $RootDirectory 'ipoe-simulator.log'
