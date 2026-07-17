@@ -18,6 +18,7 @@ PE_MACHINE = {
 }
 REQUIRED_FILES = {
     "README.md",
+    "LICENSE",
     "RELEASE_NOTES.md",
     "THIRD-PARTY-NOTICES.txt",
     "VERSION",

@@ -12,4 +12,4 @@ Scapy is distributed under GPL-2.0-only.
 The complete license is included in runtime/Lib/site-packages/scapy-2.6.1.dist-info/licenses/.
 https://scapy.net/
 
-No project-level open-source license has been declared for IPoE Simulator.
+IPoE Simulator project source is licensed under GPL-3.0-only; see LICENSE.
