@@ -1,6 +1,6 @@
 # IPoE Simulator
 
-跨平台 IPoE DHCP 模拟器，支持 Windows、macOS 和 Linux。
+面向 Windows 的 IPoE DHCP 模拟器；macOS 和 Linux 已完成代码适配。
 
 这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。
 
