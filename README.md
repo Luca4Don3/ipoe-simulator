@@ -1,4 +1,4 @@
-# IPoE 模拟器（IPoE Simulator）
+# IPoE Simulator
 
 跨平台 IPoE DHCP 模拟器，支持 Windows、macOS 和 Linux。
 
