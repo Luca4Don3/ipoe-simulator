@@ -36,6 +36,12 @@ class PowerShellRuntime:
 
     def run(self, script: str, *, timeout: int = 45) -> str:
         script = _UTF8_SETUP + script
+        LOGGER.debug(
+            "执行 PowerShell script_length=%s timeout_seconds=%s executable=%s",
+            len(script),
+            timeout,
+            self.executable,
+        )
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         try:
             result = subprocess.run(
@@ -160,7 +166,7 @@ def _discover() -> PowerShellRuntime:
             "或启用 Windows PowerShell 5.1（powershell.exe）"
         )
     if not pwsh_candidates:
-        LOGGER.warning(
+        LOGGER.info(
             "未找到 PowerShell 7，回退到 Windows PowerShell 5.1 executable=%s",
             executable,
         )
