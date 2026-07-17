@@ -131,7 +131,7 @@ def interactive(config: Config) -> int:
             elif choice == "0":
                 return 0
         except (ValueError, CoordinatorError, ConfigError) as exc:
-                LOGGER.error("交互流程失败 error=%s", exc)
+            LOGGER.error("交互流程失败 error=%s", exc)
 
 
 def main() -> int:
