@@ -39,6 +39,12 @@ class CliCompatibilityTests(unittest.TestCase):
         self.assertEqual(args.interface, "12")
         self.assertEqual(args.option60, "ITV")
 
+    def test_log_level_is_available_without_changing_existing_arguments(self) -> None:
+        ipoe_args = ipoedhcp.build_parser().parse_args(["--log-level", "DEBUG"])
+        coordinator_args = coordinator.parser().parse_args(["--log-level", "WARNING"])
+        self.assertEqual(ipoe_args.log_level, "DEBUG")
+        self.assertEqual(coordinator_args.log_level, "WARNING")
+
 
 if __name__ == "__main__":
     unittest.main()
