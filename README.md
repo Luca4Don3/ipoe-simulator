@@ -2,6 +2,8 @@
 
 这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。
 
+本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。
+
 当前发布状态是“已实现、仅完成离线模拟验证、未完成对应平台实机验证”，不能据此声明生产可用。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 支持矩阵
@@ -95,3 +97,12 @@ Windows 可运行 `run.cmd`；macOS/Linux 可运行 `sudo ./run.sh` 进入统筹
 - CLI 与 JSON 配置兼容检查。
 
 发布前仍必须在 Windows 10/11、macOS 14/15/26，以及各最低版本和现代 Linux 管理器路径上验证正常 Stop、Ctrl+C、DHCP 失败和进程异常后的地址、路由、DNS、DHCP 模式与管理器状态恢复。
+
+## 致谢
+
+感谢以下开源项目为本项目提供支持：
+
+- [Scapy](https://github.com/secdev/scapy)：用于 DHCP 报文构造、二层收发、抓包和 PCAP/PCAPNG 解析；
+- [Python](https://www.python.org/)：提供项目运行时及标准库支持。
+
+上述项目仍归其原作者及维护社区所有，并分别遵循各自的许可证和使用条款。
