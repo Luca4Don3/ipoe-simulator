@@ -6,7 +6,7 @@
 
 当前发布状态是“已实现、仅完成离线模拟验证、未完成对应平台实机验证”，不能据此声明生产可用。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
-## 支持矩阵
+## 支持平台
 
 - Windows 10 x86；
 - Windows 10/11 x64；
@@ -93,7 +93,7 @@ Windows 可运行 `run.cmd`；macOS/Linux 可运行 `sudo ./run.sh` 进入统筹
 - 事务 prepare/apply/restore 故障注入；
 - macOS/Linux 命令输出解析；
 - 跨平台模块导入；
-- Windows 三架构及 macOS/Linux 支持矩阵静态检查；
+- Windows 三架构及 macOS/Linux 支持平台静态检查；
 - CLI 与 JSON 配置兼容检查。
 
 发布前仍必须在 Windows 10/11、macOS 14/15/26，以及各最低版本和现代 Linux 管理器路径上验证正常 Stop、Ctrl+C、DHCP 失败和进程异常后的地址、路由、DNS、DHCP 模式与管理器状态恢复。
