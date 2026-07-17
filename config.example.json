@@ -1,0 +1,27 @@
+{
+  "device": {
+    "mac": "<mac>",
+    "interface": "12"
+  },
+  "dhcp_options": {
+    "option12": "STB-HOSTNAME",
+    "option43": "0x01020304",
+    "option50": "",
+    "option60": "ITV-STB",
+    "option61": "0x01aabbccddeeff",
+    "option125": "0x01020304"
+  },
+  "capture": {
+    "pcap_file": "",
+    "duration": 30
+  },
+  "network": {
+    "subnet_mask": "",
+    "gateway": "",
+    "dns": []
+  },
+  "behavior": {
+    "auto_renew": true,
+    "restore_on_exit": true
+  }
+}
