@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from .app_logging import get_logger
 from .network_backend import NetworkStateError
+
+
+LOGGER = get_logger("powershell")
 
 
 @dataclass(frozen=True)
@@ -155,6 +159,11 @@ def _discover() -> PowerShellRuntime:
             "未找到受支持的 PowerShell 运行时；请安装 PowerShell 7（pwsh.exe）"
             "或启用 Windows PowerShell 5.1（powershell.exe）"
         )
+    if not pwsh_candidates:
+        LOGGER.warning(
+            "未找到 PowerShell 7，回退到 Windows PowerShell 5.1 executable=%s",
+            executable,
+        )
     encoded = base64.b64encode(_VERSION_SCRIPT.encode("utf-16-le")).decode("ascii")
     try:
         result = subprocess.run(
@@ -181,7 +190,15 @@ def _discover() -> PowerShellRuntime:
         raise NetworkStateError(
             f"{name} 版本 {major}.{minor}.{patch} 过低；最低支持 PowerShell 5.1"
         )
-    return PowerShellRuntime(executable, major, minor, patch, edition)
+    runtime = PowerShellRuntime(executable, major, minor, patch, edition)
+    LOGGER.info(
+        "PowerShell runtime selected executable=%s version=%s edition=%s fallback_5_1=%s",
+        runtime.executable,
+        runtime.version,
+        runtime.edition,
+        runtime.is_windows_powershell_51,
+    )
+    return runtime
 
 
 @lru_cache(maxsize=1)

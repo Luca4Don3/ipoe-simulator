@@ -7,12 +7,14 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .app_logging import get_logger
 from .interfaces import InterfaceInfo
 from .profile import OPTION_CODES, option_bytes
 
 
 BROADCAST_MAC = ":".join(["ff"] * 6)
 BROADCAST_IP = ".".join(["255"] * 4)
+LOGGER = get_logger("dhcp")
 
 
 class DhcpError(RuntimeError):
@@ -324,11 +326,15 @@ class DhcpClient:
 
     def handshake(self) -> Lease:
         self.xid = struct.unpack("!I", os.urandom(4))[0]
-        print(f"Discover (XID: 0x{self.xid:08x})")
+        LOGGER.info("DHCP Discover xid=0x%08x", self.xid)
         offer = self._exchange(self._discover(), {2}, "Offer")
         if not offer.offered_ip or offer.offered_ip == "0.0.0.0" or not offer.server_id:
             raise DhcpError("Offer 缺少地址或 DHCP Server ID")
-        print(f"Offer: {offer.offered_ip}，服务器 {offer.server_id}")
+        LOGGER.info(
+            "DHCP Offer ip=%s server_id=%s",
+            offer.offered_ip,
+            offer.server_id,
+        )
         ack = self._exchange(self._request(offer.offered_ip, offer.server_id), {5}, "ACK")
         if not ack.subnet_mask:
             raise DhcpError("ACK 缺少子网掩码，拒绝修改网卡")
@@ -342,7 +348,15 @@ class DhcpClient:
             lease_time=ack.lease_time,
             renewal_time=max(ack.renewal_time, 60),
         )
-        print(f"ACK: {self.lease.ip_address}/{self.lease.subnet_mask}")
+        LOGGER.info(
+            "DHCP ACK ip=%s subnet_mask=%s gateway=%s dns_servers=%s lease_seconds=%s renewal_seconds=%s",
+            self.lease.ip_address,
+            self.lease.subnet_mask,
+            self.lease.gateway or "-",
+            ",".join(self.lease.dns_servers) or "-",
+            self.lease.lease_time,
+            self.lease.renewal_time,
+        )
         return self.lease
 
     def renew_forever(self) -> None:
@@ -350,14 +364,18 @@ class DhcpClient:
             raise DhcpError("尚未获得租约")
         while not self.stop_event.wait(self.lease.renewal_time):
             self.xid = struct.unpack("!I", os.urandom(4))[0]
-            print("开始续租...")
+            LOGGER.info("DHCP 续租开始 xid=0x%08x", self.xid)
             try:
                 ack = self._exchange(self._renew(), {5}, "续租 ACK")
                 self.lease.lease_time = ack.lease_time
                 self.lease.renewal_time = max(ack.renewal_time, 60)
-                print("续租成功")
+                LOGGER.info(
+                    "DHCP 续租成功 lease_seconds=%s renewal_seconds=%s",
+                    self.lease.lease_time,
+                    self.lease.renewal_time,
+                )
             except DhcpError as exc:
-                print(f"续租失败: {exc}")
+                LOGGER.warning("DHCP 续租失败，将继续保持当前租约 error=%s", exc)
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -368,6 +386,6 @@ class DhcpClient:
             return
         try:
             self.sendp(packet, iface=self.interface.pcap_name, verbose=False)
-            print("已发送 DHCP Release")
+            LOGGER.info("DHCP Release 已发送")
         except Exception as exc:
             raise DhcpError(f"发送 DHCP Release 失败: {exc}") from exc
