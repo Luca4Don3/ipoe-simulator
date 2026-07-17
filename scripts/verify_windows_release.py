@@ -28,7 +28,7 @@ REQUIRED_FILES = {
     "runtime/python.exe",
     "runtime/LICENSE.txt",
     "runtime/Lib/site-packages/scapy/__init__.py",
-    "runtime/Lib/site-packages/scapy-2.6.1.dist-info/licenses/GPL-2.0-only.txt",
+    "runtime/Lib/site-packages/scapy-2.6.1.dist-info/licenses/LICENSE",
     "scripts/windows_launcher.ps1",
 }
 FORBIDDEN_PARTS = {
