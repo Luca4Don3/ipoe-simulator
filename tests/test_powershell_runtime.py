@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 import unittest
@@ -42,6 +43,8 @@ class PowerShellRuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.version, "7.4.6")
         self.assertEqual(runtime.edition, "Core")
         self.assertFalse(runtime.is_windows_powershell_51)
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+        self.assertEqual(run.call_args.kwargs["errors"], "replace")
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
     @patch("ipoe_simulator.powershell_runtime.shutil.which")
@@ -69,6 +72,37 @@ class PowerShellRuntimeTests(unittest.TestCase):
     def test_reports_missing_runtime(self, _which) -> None:
         with self.assertRaisesRegex(NetworkStateError, "未找到受支持的 PowerShell"):
             get_powershell_runtime()
+
+    @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
+    @patch("ipoe_simulator.powershell_runtime.shutil.which")
+    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
+    def test_does_not_fall_back_when_preferred_runtime_fails(self, run, which) -> None:
+        which.side_effect = lambda name: f"C:\\{name}"
+        run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="pwsh failed"
+        )
+
+        with self.assertRaisesRegex(NetworkStateError, "pwsh.exe 返回 1"):
+            get_powershell_runtime()
+
+        self.assertEqual(run.call_count, 1)
+
+    @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
+    @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value="C:\\pwsh.exe")
+    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
+    def test_runtime_invocation_prepends_utf8_setup(self, run, _which) -> None:
+        run.return_value = _version_result(7, 4, 6)
+        runtime = get_powershell_runtime()
+        run.reset_mock()
+        run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr=""
+        )
+
+        runtime.run("Write-Output 'ok'")
+
+        encoded = run.call_args.args[0][-1]
+        script = base64.b64decode(encoded).decode("utf-16-le")
+        self.assertIn("UTF8Encoding", script)
 
 
 if __name__ == "__main__":

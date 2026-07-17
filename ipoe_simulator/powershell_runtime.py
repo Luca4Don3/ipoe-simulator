@@ -31,6 +31,7 @@ class PowerShellRuntime:
         return self.major == 5 and self.minor == 1
 
     def run(self, script: str, *, timeout: int = 45) -> str:
+        script = _UTF8_SETUP + script
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         try:
             result = subprocess.run(
@@ -46,6 +47,8 @@ class PowerShellRuntime:
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 check=False,
             )
@@ -66,8 +69,14 @@ class PowerShellRuntime:
             ) from exc
 
 
+_UTF8_SETUP = (
+    "$utf8 = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false; "
+    "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
+)
+
 _VERSION_SCRIPT = (
-    "$ErrorActionPreference='Stop'; "
+    _UTF8_SETUP
+    + "$ErrorActionPreference='Stop'; "
     "[pscustomobject]@{ "
     "major=[int]$PSVersionTable.PSVersion.Major; "
     "minor=[int]$PSVersionTable.PSVersion.Minor; "
@@ -80,45 +89,41 @@ _VERSION_SCRIPT = (
 def _discover() -> PowerShellRuntime:
     if os.name != "nt":
         raise NetworkStateError("PowerShell 运行时仅支持 Windows")
-    found = [(name, shutil.which(name)) for name in ("pwsh.exe", "powershell.exe")]
-    available = [(name, path) for name, path in found if path]
-    if not available:
+    pwsh = shutil.which("pwsh.exe")
+    executable = pwsh or shutil.which("powershell.exe")
+    name = "pwsh.exe" if pwsh else "powershell.exe"
+    if not executable:
         raise NetworkStateError(
             "未找到受支持的 PowerShell 运行时；请安装 PowerShell 7（pwsh.exe）"
             "或启用 Windows PowerShell 5.1（powershell.exe）"
         )
-    errors: list[str] = []
-    for name, executable in available:
-        encoded = base64.b64encode(_VERSION_SCRIPT.encode("utf-16-le")).decode("ascii")
-        try:
-            result = subprocess.run(
-                [executable, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            errors.append(f"{name}: {exc}")
-            continue
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "未知错误").strip()
-            errors.append(f"{name}: PowerShell 返回 {result.returncode}: {detail}")
-            continue
-        try:
-            data = json.loads(result.stdout.strip())
-            major, minor, patch = (int(data[key]) for key in ("major", "minor", "patch"))
-            edition = str(data.get("edition") or "unknown")
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            errors.append(f"{name}: 版本信息无效: {exc}")
-            continue
-        if (major, minor) < (5, 1):
-            raise NetworkStateError(
-                f"{name} 版本 {major}.{minor}.{patch} 过低；最低支持 PowerShell 5.1"
-            )
-        return PowerShellRuntime(executable, major, minor, patch, edition)
-    detail = "; ".join(errors)
-    raise NetworkStateError(f"PowerShell 运行时检测失败: {detail}")
+    encoded = base64.b64encode(_VERSION_SCRIPT.encode("utf-16-le")).decode("ascii")
+    try:
+        result = subprocess.run(
+            [executable, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NetworkStateError(f"{name} 启动失败: {exc}") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "未知错误").strip()
+        raise NetworkStateError(f"{name} 返回 {result.returncode}: {detail}")
+    try:
+        data = json.loads(result.stdout.strip())
+        major, minor, patch = (int(data[key]) for key in ("major", "minor", "patch"))
+        edition = str(data.get("edition") or "unknown")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise NetworkStateError(f"{name} 版本信息无效: {exc}") from exc
+    if (major, minor) < (5, 1):
+        raise NetworkStateError(
+            f"{name} 版本 {major}.{minor}.{patch} 过低；最低支持 PowerShell 5.1"
+        )
+    return PowerShellRuntime(executable, major, minor, patch, edition)
 
 
 @lru_cache(maxsize=1)
