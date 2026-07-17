@@ -23,5 +23,8 @@
   "behavior": {
     "auto_renew": true,
     "restore_on_exit": true
+  },
+  "logging": {
+    "directory": ""
   }
 }

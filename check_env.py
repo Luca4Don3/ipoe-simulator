@@ -11,6 +11,7 @@ import socket
 import sys
 from pathlib import Path
 
+from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
 from ipoe_simulator.dependencies import (
     ensure_scapy,
     is_admin,
@@ -28,6 +29,7 @@ from ipoe_simulator.powershell_runtime import powershell_status
 
 
 ROOT = Path(__file__).resolve().parent
+LOGGER = get_logger("check-env")
 
 
 def _nearest_existing_parent(path: Path) -> Path:
@@ -249,7 +251,9 @@ def run() -> tuple[bool, dict[str, object]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="IPoE DHCP 运行环境检测")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     args = parser.parse_args()
+    configure_logging(level_name=args.log_level, log_directory=ROOT)
     ok, checks = run()
     if args.json:
         print(json.dumps(checks, indent=2, ensure_ascii=False))
@@ -257,9 +261,14 @@ def main() -> int:
         for key, value in checks.items():
             if key == "ok":
                 continue
-            status = "FAIL" if value is False or key.endswith("_error") else "INFO"
-            print(f"[{status}] {key}: {value}")
-        print("环境就绪" if ok else "环境检测未通过；未执行任何网卡修改")
+            if value is False or key.endswith("_error"):
+                LOGGER.error("环境检查失败 key=%s value=%s", key, value)
+            else:
+                LOGGER.info("环境检查 key=%s value=%s", key, value)
+        if ok:
+            LOGGER.info("环境就绪")
+        else:
+            LOGGER.error("环境检测未通过；未执行任何网卡修改")
     return 0 if ok else 1
 
 

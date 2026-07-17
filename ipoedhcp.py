@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
 from ipoe_simulator.capture import CaptureError, capture_dhcp, default_capture_path
 from ipoe_simulator.dhcp_client import DhcpClient, DhcpError
 from ipoe_simulator.dependencies import DependencyError, ensure_runtime
@@ -20,6 +21,7 @@ from ipoe_simulator.platform_network import (
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / "ipoedhcp_config.json"
 JOURNAL = default_journal_path(ROOT)
+LOGGER = get_logger("cli")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--capture-output", help="抓包输出路径，默认写入 .temp")
     parser.add_argument("--list-interfaces", action="store_true")
     parser.add_argument("--timeout", type=int, default=8, help="Offer/ACK 等待秒数")
+    parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return parser
 
 
@@ -53,14 +56,13 @@ def _run_capture(config: Config, args: argparse.Namespace) -> int:
     interface = resolve_interface(selector)
     duration = args.capture_only
     output = Path(args.capture_output) if args.capture_output else default_capture_path(ROOT)
-    print(f"网卡: {interface.display()}")
-    print(f"开始抓取 DHCP，时长 {duration}s")
+    LOGGER.info("抓包开始 interface=%s duration_seconds=%s", interface.display(), duration)
     saved = capture_dhcp(interface, duration, output)
     config.set(interface.pcap_name, "device", "interface")
     config.set(str(saved), "capture", "pcap_file")
     config.set(duration, "capture", "duration")
     config.save()
-    print(f"抓包已保存: {saved}")
+    LOGGER.info("抓包完成 output=%s", saved)
     return 0
 
 
@@ -79,8 +81,8 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
     transaction: NetworkTransaction | None = None
     exit_code = 0
     try:
-        print(f"目标网卡: {interface.display()}")
-        print("保存网卡状态并进入 DHCP 模拟...")
+        LOGGER.info("DHCP 事务开始 interface=%s", interface.display())
+        LOGGER.info("保存网卡快照并准备进入 DHCP 模拟 journal=%s", JOURNAL)
         transaction = NetworkTransaction.begin(interface, JOURNAL)
         lease = client.handshake()
         transaction.configure_lease(
@@ -89,57 +91,75 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
             lease.gateway,
             lease.dns_servers,
         )
-        print(f"已连接: {lease.ip_address}，按 Ctrl+C Stop 并恢复网卡")
+        LOGGER.info(
+            "DHCP 租约已应用 ip=%s subnet_mask=%s gateway=%s dns_servers=%s",
+            lease.ip_address,
+            lease.subnet_mask,
+            lease.gateway or "-",
+            ",".join(lease.dns_servers) or "-",
+        )
+        LOGGER.info("进入运行状态，按 Ctrl+C 停止并恢复网卡")
         if config.get("behavior", "auto_renew", default=True):
             client.renew_forever()
         else:
             while True:
                 client.stop_event.wait(3600)
     except KeyboardInterrupt:
-        print("收到 Stop 请求")
+        LOGGER.info("收到停止请求")
         client.stop()
     except DhcpError as exc:
-        print(f"DHCP 失败: {exc}", file=sys.stderr)
+        LOGGER.error("DHCP 失败 error=%s", exc)
         exit_code = 4
     finally:
         try:
             client.release()
         except DhcpError as exc:
-            print(str(exc), file=sys.stderr)
+            LOGGER.error("DHCP Release 失败 error=%s", exc)
             if exit_code == 0:
                 exit_code = 4
         if transaction is not None:
             try:
-                print("正在恢复网卡完整状态...")
+                LOGGER.info("开始恢复网卡状态 journal=%s", JOURNAL)
                 transaction.restore()
-                print("网卡状态已恢复并验证")
+                LOGGER.info("网卡状态恢复并验证成功")
             except NetworkStateError as exc:
-                print(f"严重错误: 网卡恢复失败: {exc}", file=sys.stderr)
-                print(f"恢复日志保留于: {JOURNAL}", file=sys.stderr)
+                LOGGER.critical("严重错误：网卡恢复失败 error=%s journal=%s", exc, JOURNAL)
                 exit_code = 5
     return exit_code
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    logging_ready = False
     try:
+        config = Config(args.config)
+        configure_logging(
+            level_name=args.log_level,
+            log_directory=config.log_directory(ROOT),
+        )
+        logging_ready = True
         if args.list_interfaces:
             for interface in list_interfaces(include_virtual=True):
                 print(interface.display())
             return 0
-        config = Config(args.config)
         _apply_arguments(config, args)
         if args.capture_only is not None:
             return _run_capture(config, args)
         return _run_dhcp(config, args)
     except (ConfigError, InterfaceError) as exc:
-        print(f"参数错误: {exc}", file=sys.stderr)
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+        LOGGER.error("参数错误 error=%s", exc)
         return 2
     except CaptureError as exc:
-        print(f"抓包失败: {exc}", file=sys.stderr)
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+        LOGGER.error("抓包失败 error=%s", exc)
         return 3
     except (NetworkStateError, DependencyError) as exc:
-        print(f"网络错误: {exc}", file=sys.stderr)
+        if not logging_ready:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+        LOGGER.error("网络错误 error=%s", exc)
         return 5
 
 
