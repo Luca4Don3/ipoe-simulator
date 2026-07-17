@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import subprocess
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUN_CMD = ROOT / "run.cmd"
+LAUNCHER = ROOT / "scripts" / "windows_launcher.ps1"
+
+
+class WindowsLauncherTests(unittest.TestCase):
+    def test_batch_launcher_prefers_powershell_7_and_propagates_exit_code(self) -> None:
+        content = RUN_CMD.read_text(encoding="utf-8")
+        self.assertLess(content.index("where pwsh.exe"), content.index("where powershell.exe"))
+        self.assertIn('set "exit_code=%errorlevel%"', content)
+        self.assertIn("exit /b %exit_code%", content)
+
+    def test_batch_launcher_logs_before_runtime_discovery(self) -> None:
+        content = RUN_CMD.read_text(encoding="utf-8")
+        self.assertLess(
+            content.index('INFO launcher: run.cmd'),
+            content.index("where pwsh.exe"),
+        )
+        self.assertIn('cd /d "%~dp0"', content)
+        self.assertIn('chcp 65001', content)
+
+    def test_powershell_launcher_covers_elevation_and_python_validation(self) -> None:
+        content = LAUNCHER.read_text(encoding="utf-8")
+        required_fragments = (
+            "Start-Process",
+            "-Verb RunAs",
+            "-Wait",
+            "-PassThru",
+            "NativeErrorCode -eq 1223",
+            "runtime\\python.exe",
+            "Get-Command 'py.exe'",
+            "[Version]'3.10.0'",
+            "与 Windows 架构",
+            "@LauncherArguments",
+            "$LauncherArguments = @($args)",
+        )
+        for fragment in required_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, content)
+
+    def test_committed_line_endings_follow_platform_rules(self) -> None:
+        attributes = subprocess.run(
+            ["git", "check-attr", "eol", "--", "run.cmd", "run.sh"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        self.assertIn("run.cmd: eol: crlf", attributes)
+        self.assertIn("run.sh: eol: lf", attributes)
+
+
+if __name__ == "__main__":
+    unittest.main()
