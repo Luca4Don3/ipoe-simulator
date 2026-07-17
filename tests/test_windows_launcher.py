@@ -39,6 +39,7 @@ class WindowsLauncherTests(unittest.TestCase):
             "[Version]'3.10.0'",
             "与 Windows 架构",
             "@LauncherArguments",
+            "$LauncherArguments = @($args)",
         )
         for fragment in required_fragments:
             with self.subTest(fragment=fragment):

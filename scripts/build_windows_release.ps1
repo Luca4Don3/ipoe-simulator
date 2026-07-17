@@ -50,6 +50,7 @@ New-Item -ItemType Directory -Path $DownloadDirectory -Force | Out-Null
 
 $rootFiles = @(
     'README.md',
+    'LICENSE',
     'RELEASE_NOTES.md',
     'THIRD-PARTY-NOTICES.txt',
     'VERSION',
