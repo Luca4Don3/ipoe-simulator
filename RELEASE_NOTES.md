@@ -1,3 +1,18 @@
+# IPoE Simulator v0.1.1
+
+这是 Windows PowerShell 5.1 兼容性修复版，增加了 Windows PowerShell 5.1 启动脚本语法门禁，并改用兼容性更明确的 UTF-8 编码构造方式。
+
+普通用户请下载与 Windows 原生架构匹配的平台附件：
+
+- `ipoe-simulator-v0.1.1-windows-x86.zip`
+- `ipoe-simulator-v0.1.1-windows-x64.zip`
+- `ipoe-simulator-v0.1.1-windows-arm64.zip`
+- `SHA256SUMS.txt`
+
+此前 `v0.1.0` Release 仍可在历史版本中获取。
+
+---
+
 # IPoE Simulator v0.1.0
 
 这是首个 Windows 正式 Release。
