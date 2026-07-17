@@ -287,6 +287,7 @@ def npcap_status() -> tuple[bool, str]:
 
 def _authenticode_valid(path: Path) -> bool:
     from .powershell_runtime import get_powershell_runtime
+    from .network_backend import NetworkStateError
 
     script = (
         "$ErrorActionPreference='Stop'; "
@@ -294,8 +295,8 @@ def _authenticode_valid(path: Path) -> bool:
     )
     try:
         return get_powershell_runtime().run(script, timeout=30).lower() == "valid"
-    except Exception:
-        return False
+    except NetworkStateError as exc:
+        raise DependencyError(f"Npcap Authenticode 校验执行失败: {exc}") from exc
 
 
 def install_npcap() -> str:
