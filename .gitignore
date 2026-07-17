@@ -5,3 +5,4 @@ __pycache__/
 ipoedhcp_config.json
 HANDOFF.md
 *.log
+/AGENTS.md
