@@ -1,3 +1,18 @@
+# IPoE Simulator v0.2.0
+
+本版本新增独立的手动网卡恢复命令。系统断电或进程异常退出后，可直接从程序默认恢复日志恢复并校验网卡状态，不需要读取拨号配置，也不会检查、安装或加载 Scapy/Npcap。
+
+普通用户请下载与 Windows 原生架构匹配的平台附件：
+
+- `ipoe-simulator-v0.2.0-windows-x86.zip`
+- `ipoe-simulator-v0.2.0-windows-x64.zip`
+- `ipoe-simulator-v0.2.0-windows-arm64.zip`
+- `SHA256SUMS.txt`
+
+恢复命令为 `python3 ipoedhcp.py --restore`；Windows 便携包可使用 `run.cmd --restore`。无待恢复日志时幂等成功；存在日志时必须以管理员/root 权限运行。恢复失败会返回非零退出码并保留日志及失败状态，便于排查和重试。
+
+---
+
 # IPoE Simulator v0.1.1
 
 这是 Windows PowerShell 5.1 兼容性修复版，增加了 Windows PowerShell 5.1 启动脚本语法门禁，并改用兼容性更明确的 UTF-8 编码构造方式。

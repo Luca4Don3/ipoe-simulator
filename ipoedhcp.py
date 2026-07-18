@@ -8,13 +8,14 @@ from pathlib import Path
 from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
 from ipoe_simulator.capture import CaptureError, capture_dhcp, default_capture_path
 from ipoe_simulator.dhcp_client import DhcpClient, DhcpError
-from ipoe_simulator.dependencies import DependencyError, ensure_runtime
+from ipoe_simulator.dependencies import DependencyError, ensure_runtime, is_admin
 from ipoe_simulator.interfaces import InterfaceError, list_interfaces, resolve_interface
 from ipoe_simulator.profile import Config, ConfigError, OPTION_CODES
 from ipoe_simulator.platform_network import (
     NetworkStateError,
     NetworkTransaction,
     default_journal_path,
+    restore_from_journal,
 )
 
 
@@ -26,17 +27,43 @@ LOGGER = get_logger("cli")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="IPoE DHCP Simulator")
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--restore", action="store_true", help="从默认恢复日志恢复网卡")
+    actions.add_argument("--capture-only", nargs="?", const=30, type=int, metavar="秒数")
+    actions.add_argument("--list-interfaces", action="store_true")
     parser.add_argument("--mac", "-m", help="机顶盒 MAC")
     parser.add_argument("--interface", help="网卡 GUID、ifIndex、名称或唯一描述")
     for code in OPTION_CODES:
         parser.add_argument(f"--option{code}")
     parser.add_argument("--config", "-c", default=str(DEFAULT_CONFIG), help="JSON 配置文件")
-    parser.add_argument("--capture-only", nargs="?", const=30, type=int, metavar="秒数")
     parser.add_argument("--capture-output", help="抓包输出路径，默认写入 .temp")
-    parser.add_argument("--list-interfaces", action="store_true")
     parser.add_argument("--timeout", type=int, default=8, help="Offer/ACK 等待秒数")
     parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return parser
+
+
+def _run_restore() -> int:
+    try:
+        if not JOURNAL.exists():
+            LOGGER.info("无待恢复状态 journal=%s", JOURNAL)
+            return 0
+        if not is_admin():
+            if sys.platform == "win32":
+                LOGGER.error("恢复失败：需要管理员权限 journal=%s", JOURNAL)
+            else:
+                LOGGER.error(
+                    "恢复失败：需要 root/sudo 权限；本程序不会自动提权 journal=%s",
+                    JOURNAL,
+                )
+            return 5
+        LOGGER.info("开始手动恢复网卡状态 journal=%s", JOURNAL)
+        restore_from_journal(JOURNAL)
+    except NetworkStateError:
+        raise
+    except OSError as exc:
+        raise NetworkStateError(f"手动恢复无法安全完成: {exc}") from exc
+    LOGGER.info("手动恢复网卡状态并验证成功")
+    return 0
 
 
 def _apply_arguments(config: Config, args: argparse.Namespace) -> None:
@@ -128,10 +155,14 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     logging_ready = False
     try:
+        if args.restore:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+            logging_ready = True
+            return _run_restore()
         config = Config(args.config)
         configure_logging(
             level_name=args.log_level,
