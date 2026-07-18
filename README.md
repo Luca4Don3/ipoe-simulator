@@ -6,15 +6,15 @@
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-`v0.2.0` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+`v0.2.1` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 下载
 
 普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
 
-- `ipoe-simulator-v0.2.0-windows-x86.zip`
-- `ipoe-simulator-v0.2.0-windows-x64.zip`
-- `ipoe-simulator-v0.2.0-windows-arm64.zip`
+- `ipoe-simulator-v0.2.1-windows-x86.zip`
+- `ipoe-simulator-v0.2.1-windows-x64.zip`
+- `ipoe-simulator-v0.2.1-windows-arm64.zip`
 
 使用同一 Release 中的 `SHA256SUMS.txt` 校验下载文件。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy，只提供 `run.cmd`，不包含 `run.sh`。Npcap 不随包分发，仍从官方地址下载并在安装前校验 Authenticode 签名。
 
