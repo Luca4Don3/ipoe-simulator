@@ -20,6 +20,66 @@
 
 GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 无法关闭，仅供开发者使用，不包含便携运行时；普通用户应下载上述平台附件。
 
+## 配置示例
+
+`config.example.json` 是现有配置结构的参考。复制后请替换所有尖括号占位符；不要把占位符直接用于真实拨号。
+
+最小配置（只指定接口和机顶盒 MAC）：
+
+```json
+{
+  "device": {
+    "mac": "<mac>",
+    "interface": "<interface>"
+  }
+}
+```
+
+通用 iTV 完整配置示例（Option 值必须来自你的授权抓包或运营商提供的测试资料）：
+
+```json
+{
+  "device": {
+    "mac": "<mac>",
+    "interface": "<interface>"
+  },
+  "dhcp_options": {
+    "option12": "<hostname>",
+    "option43": "<option43_hex>",
+    "option50": "<requested_ipv4>",
+    "option60": "<vendor_class>",
+    "option61": "<option61_hex>",
+    "option125": "<option125_hex>"
+  },
+  "capture": {
+    "pcap_file": ".temp/<capture>.pcap",
+    "duration": 30
+  },
+  "network": {
+    "subnet_mask": "",
+    "gateway": "",
+    "dns": []
+  },
+  "behavior": {
+    "auto_renew": true,
+    "restore_on_exit": true
+  },
+  "logging": {
+    "directory": ".temp/logs"
+  }
+}
+```
+
+DHCP 选项格式与边界：Option 12 是 UTF-8 主机名；Option 43、61、125 使用 `0x` 开头的连续十六进制字节串；Option 50 是 IPv4 地址（或 `0x` 加 4 个字节）；Option 60 是 UTF-8 厂商类字符串。未使用的选项留空。选项内容通常来自授权网络中机顶盒的 DHCP Discover/Request 抓包，优先使用 `extract_params.py` 提取并人工复核；不要猜测、拼接或照搬其他用户的标识。Option 43/125 的内部 TLV 和厂商编码没有通用标准，必须按实际网络资料解释。
+
+## 安全使用与失败处理
+
+仅在你拥有授权的实验网或维护网中运行，并使用独立的测试网卡；不要在承载日常办公、生产业务或未知 DHCP 服务的接口上拨号。程序会保存并恢复 IPv4 地址、路由、DNS、DHCP 及网卡指标，运行期间这些设置可能短暂改变；IPv6 不在恢复范围内。
+
+正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/`、macOS `/Library/Application Support/IPoESimulator` 或 Linux `/var/lib/ipoe-simulator`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先让程序处理遗留恢复日志，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
+
+PCAP、日志和恢复日志可能包含 MAC、IP、接口名称、厂商标识及运营商专有字段。共享前请脱敏并限制文件权限；不要提交到公开仓库。抓包或拨号失败时应保留脱敏后的错误上下文和退出码，避免公开原始报文、完整配置或凭据。
+
 ## 代码适配范围
 
 - Windows 10/11 x86（正式支持）；
