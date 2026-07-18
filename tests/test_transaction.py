@@ -103,6 +103,15 @@ class FakeBackend(NetworkBackend):
 
 
 class TransactionTests(unittest.TestCase):
+    def test_damaged_journal_is_preserved(self) -> None:
+        backend = FakeBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "network-recovery.json"
+            journal.write_text("{broken", encoding="utf-8")
+            with self.assertRaisesRegex(NetworkStateError, "恢复日志损坏"):
+                restore_from_journal(journal, backend=backend)
+            self.assertTrue(journal.exists())
+
     def test_schema_v2_round_trip(self) -> None:
         backend = FakeBackend()
         with tempfile.TemporaryDirectory() as directory:

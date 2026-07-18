@@ -6,15 +6,15 @@
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-`v0.1.1` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+`v0.2.0` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 下载
 
 普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
 
-- `ipoe-simulator-v0.1.1-windows-x86.zip`
-- `ipoe-simulator-v0.1.1-windows-x64.zip`
-- `ipoe-simulator-v0.1.1-windows-arm64.zip`
+- `ipoe-simulator-v0.2.0-windows-x86.zip`
+- `ipoe-simulator-v0.2.0-windows-x64.zip`
+- `ipoe-simulator-v0.2.0-windows-arm64.zip`
 
 使用同一 Release 中的 `SHA256SUMS.txt` 校验下载文件。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy，只提供 `run.cmd`，不包含 `run.sh`。Npcap 不随包分发，仍从官方地址下载并在安装前校验 Authenticode 签名。
 
@@ -76,7 +76,7 @@ DHCP 选项格式与边界：Option 12 是 UTF-8 主机名；Option 43、61、12
 
 仅在你拥有授权的实验网或维护网中运行，并使用独立的测试网卡；不要在承载日常办公、生产业务或未知 DHCP 服务的接口上拨号。程序会保存并恢复 IPv4 地址、路由、DNS、DHCP 及网卡指标，运行期间这些设置可能短暂改变；IPv6 不在恢复范围内。
 
-正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/`、macOS `/Library/Application Support/IPoESimulator` 或 Linux `/var/lib/ipoe-simulator`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先让程序处理遗留恢复日志，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
+正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/network-recovery.json`、macOS `/Library/Application Support/IPoESimulator/network-recovery.json` 或 Linux `/var/lib/ipoe-simulator/network-recovery.json`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先运行手动恢复命令，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
 
 PCAP、日志和恢复日志可能包含 MAC、IP、接口名称、厂商标识及运营商专有字段。共享前请脱敏并限制文件权限；不要提交到公开仓库。抓包或拨号失败时应保留脱敏后的错误上下文和退出码，避免公开原始报文、完整配置或凭据。
 
@@ -133,7 +133,7 @@ POSIX 环境检测不会安装依赖，也不会修改网卡。Windows 维持原
 
 ## 使用
 
-项目提供环境检测、抓包、参数提取、直接拨号和统筹器五类命令。所有命令均在项目根目录执行；Windows 运行网络事务时使用管理员权限。
+项目提供环境检测、抓包、参数提取、直接拨号、手动恢复和统筹器六类命令。所有命令均在项目根目录执行；Windows 运行网络事务时使用管理员权限。
 
 ### 环境检测
 
@@ -183,6 +183,15 @@ python3 ipoedhcp.py --config ipoedhcp_config.json --interface 12 --timeout 8 --l
 
 程序启动 DHCP 事务前保存网卡快照，结束时执行恢复和校验。正常停止使用 `Ctrl+C`；DHCP 失败、可处理异常和父进程异常退出均进入恢复流程。
 
+手动恢复程序默认 journal：
+
+```text
+python3 ipoedhcp.py --restore
+python3 ipoedhcp.py --restore --log-level DEBUG
+```
+
+`--restore` 是独立主操作，不能与抓包、列出接口或拨号主操作组合。它在读取 `ipoedhcp_config.json` 前执行，不读取拨号配置，也不检查、安装或加载 Scapy/Npcap。没有默认 journal 时会明确记录“无待恢复状态”并返回 `0`；存在 journal 时要求 Windows 管理员权限或 macOS/Linux `root/sudo` 权限。journal 损坏、属于其他平台、权限不足、恢复失败或恢复校验失败时返回 `5` 并保留现场。
+
 ### 使用 `extract_params.py` 提取参数
 
 从 PCAP 或 PCAPNG 文件提取 DHCP 参数并打印 JSON：
@@ -222,10 +231,11 @@ python3 coordinator.py --all --interface 12 --duration 30
 python3 coordinator.py --show
 python3 coordinator.py --reset
 python3 coordinator.py --interactive
+python3 coordinator.py --restore
 python3 coordinator.py --config ipoedhcp_config.json --log-level INFO
 ```
 
-`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入交互菜单。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。
+`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入包含手动恢复项的交互菜单。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
 
 ### Windows 启动器
 
@@ -234,25 +244,33 @@ Windows 可运行：
 ```text
 run.cmd --show
 run.cmd --config ipoedhcp_config.json --interactive
+run.cmd --restore
 ```
 
-启动器优先选择 PowerShell 7，并兼容回退到 Windows PowerShell 5.1。macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器。
+启动器优先选择 PowerShell 7，并兼容回退到 Windows PowerShell 5.1。macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器，或运行 `sudo ./run.sh --restore` 手动恢复。
 
 ### 恢复命令与自动恢复
 
-恢复入口采用 DHCP 事务自动流程，用户通过启动或再次启动程序进入恢复流程。当前 CLI 的恢复能力以内置事务和 watchdog 方式提供。
+恢复同时提供事务自动流程、watchdog 和独立手动命令。手动命令只接受程序按当前平台确定的默认 journal，不提供任意 journal 路径参数。
 
 1. 拨号开始前创建 schema v2 恢复日志；
 2. 正常 Stop、`Ctrl+C`、DHCP 失败和可处理异常时恢复网卡；
 3. 父进程异常退出时，由 watchdog 读取恢复日志并执行恢复；
-4. 下一次启动时，程序先检查待恢复日志并完成恢复，再开始新的 DHCP 事务；
+4. 断电重启或需要人工重试时，先运行 `python3 ipoedhcp.py --restore`、`run.cmd --restore` 或 `sudo ./run.sh --restore`；
 5. 恢复成功后删除日志，恢复失败时保留日志并记录错误，后续启动继续重试。
 
 恢复状态目录：
 
-- Windows：项目 `.temp/`；
-- macOS：`/Library/Application Support/IPoESimulator`；
-- Linux：`/var/lib/ipoe-simulator`。
+- Windows：项目 `.temp/network-recovery.json`；
+- macOS：`/Library/Application Support/IPoESimulator/network-recovery.json`；
+- Linux：`/var/lib/ipoe-simulator/network-recovery.json`。
+
+断电后的建议步骤：
+
+1. 重启后先不要再次抓包或拨号；
+2. 使用管理员/root 权限运行对应平台的 `--restore` 命令；
+3. 返回 `0` 后人工核对接口 IPv4、默认路由、DNS、DHCP 模式和网络管理器状态；
+4. 若返回 `5`，保留默认 journal 和接口现场，根据日志排查后重试，不要删除或手工改写 journal。
 
 ## 恢复安全
 
@@ -260,7 +278,7 @@ run.cmd --config ipoedhcp_config.json --interactive
 
 Windows watchdog 监听父 PID；macOS/Linux watchdog 监听继承管道。恢复失败时保留日志并记录 `restore_failed`，下一次运行优先处理待恢复日志。
 
-纯 CLI 运行模式提供进程生命周期内的恢复能力；整机重新启动后，程序根据保留的恢复日志执行恢复。
+纯 CLI 运行模式提供进程生命周期内的自动恢复能力；整机重新启动后，管理员可通过独立命令根据保留的恢复日志执行恢复。该路径不依赖 Scapy 或 Npcap。
 
 ## 致谢
 

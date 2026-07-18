@@ -18,10 +18,18 @@ LOGGER = get_logger("coordinator")
 
 
 class CoordinatorError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, exit_code: int = 6):
+        super().__init__(message)
+        self.exit_code = exit_code
 
 
-def run_script(script: str, args: list[str], description: str) -> None:
+def run_script(
+    script: str,
+    args: list[str],
+    description: str,
+    *,
+    propagate_exit_code: bool = False,
+) -> None:
     path = ROOT / script
     if not path.exists():
         raise CoordinatorError(f"脚本不存在: {path}")
@@ -29,12 +37,16 @@ def run_script(script: str, args: list[str], description: str) -> None:
     result = subprocess.run([sys.executable, "-u", str(path), *args], cwd=ROOT, check=False)
     if result.returncode != 0:
         LOGGER.error("子流程失败 script=%s returncode=%s", script, result.returncode)
-        raise CoordinatorError(f"{script} 失败，退出码 {result.returncode}")
+        raise CoordinatorError(
+            f"{script} 失败，退出码 {result.returncode}",
+            exit_code=result.returncode if propagate_exit_code else 6,
+        )
     LOGGER.info("子流程完成 script=%s", script)
 
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="IPoE DHCP 统筹管理器")
+    p.add_argument("--restore", action="store_true")
     p.add_argument("--capture", nargs="?", const=True, metavar="秒数")
     p.add_argument("--extract", nargs="?", const=True, metavar="PCAP")
     p.add_argument("--dhcp", action="store_true")
@@ -51,6 +63,22 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--interactive", "-i", action="store_true")
     p.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return p
+
+
+def validate_actions(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if not args.restore:
+        return
+    conflicts = (
+        args.capture is not None,
+        args.extract is not None,
+        args.dhcp,
+        args.all,
+        args.show,
+        args.reset,
+        args.interactive,
+    )
+    if any(conflicts):
+        p.error("--restore 不能与抓包、提取、拨号、查看、重置或交互主操作组合")
 
 
 def apply_cli(config: Config, args: argparse.Namespace) -> None:
@@ -101,11 +129,26 @@ def do_dhcp(config: Config) -> None:
     run_script("ipoedhcp.py", config_args(config), "开始 IPoE DHCP 模拟")
 
 
+def do_restore(log_level: str | None = None) -> None:
+    args = ["--restore"]
+    if log_level:
+        args.extend(("--log-level", log_level))
+    run_script(
+        "ipoedhcp.py",
+        args,
+        "从默认恢复日志恢复网卡",
+        propagate_exit_code=True,
+    )
+
+
 def interactive(config: Config) -> int:
     while True:
         print("\nIPoE DHCP 统筹管理器")
         print(f"MAC: {config.get('device', 'mac', default='(未设置)')}")
-        print("1. 导入/抓包  2. 提取参数  3. 直接拨号  4. 完整流程  5. 查看配置  0. 退出")
+        print(
+            "1. 导入/抓包  2. 提取参数  3. 直接拨号  4. 完整流程  "
+            "5. 查看配置  6. 恢复网卡  0. 退出"
+        )
         choice = input("选择: ").strip()
         try:
             if choice == "1":
@@ -128,18 +171,27 @@ def interactive(config: Config) -> int:
                 do_dhcp(config)
             elif choice == "5":
                 print(json.dumps(config.data, indent=2, ensure_ascii=False))
+            elif choice == "6":
+                do_restore()
             elif choice == "0":
                 return 0
         except (ValueError, CoordinatorError, ConfigError) as exc:
             LOGGER.error("交互流程失败 error=%s", exc)
 
 
-def main() -> int:
-    args = parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    argument_parser = parser()
+    args = argument_parser.parse_args(argv)
+    validate_actions(argument_parser, args)
     logging_ready = False
     if args.log_level:
         os.environ["IPOE_LOG_LEVEL"] = args.log_level
     try:
+        if args.restore:
+            configure_logging(level_name=args.log_level, log_directory=ROOT)
+            logging_ready = True
+            do_restore(args.log_level)
+            return 0
         config = Config(args.config)
         configure_logging(
             level_name=args.log_level,
@@ -176,7 +228,7 @@ def main() -> int:
         if not logging_ready:
             configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("流程失败 error=%s", exc)
-        return 6
+        return exc.exit_code if isinstance(exc, CoordinatorError) else 6
 
 
 if __name__ == "__main__":
