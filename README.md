@@ -1,12 +1,12 @@
 # IPoE Simulator
 
-正式支持 Windows 的 IPoE DHCP 模拟器；macOS 和 Linux 仅完成代码适配，不发布平台附件。
+正式支持 Windows 10/11 x86、x64 和 ARM64 的 IPoE DHCP 模拟器；macOS 和 Linux 仅完成代码适配，不发布平台附件。
 
 这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。项目源码采用 GPL-3.0-only，详见 `LICENSE`。
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-当前发布状态不能据此声明生产可用。x64 Release 候选包需要在普通 Windows 11 上完成双击实测；x86 尚未完成对应硬件实机验证，ARM64 仅完成架构和静态完整性验证。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+`v0.1.1` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 下载
 
@@ -22,9 +22,9 @@ GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 无法关�
 
 ## 代码适配范围
 
-- Windows 10 x86（正式支持，尚未实机验证）；
+- Windows 10/11 x86（正式支持）；
 - Windows 10/11 x64（正式支持）；
-- Windows 10/11 ARM64（正式支持，仅完成静态验证）；
+- Windows 10/11 ARM64（正式支持）；
 - macOS 14、15、26，Intel x86_64 与 Apple Silicon；
 - RHEL/CentOS 6.5+；
 - Ubuntu 12.04 LTS+；
