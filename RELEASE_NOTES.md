@@ -1,3 +1,18 @@
+# IPoE Simulator v0.2.1
+
+本版本补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，许可证仍为 GPL-3.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
+
+普通用户请下载与 Windows 原生架构匹配的平台附件：
+
+- `ipoe-simulator-v0.2.1-windows-x86.zip`
+- `ipoe-simulator-v0.2.1-windows-x64.zip`
+- `ipoe-simulator-v0.2.1-windows-arm64.zip`
+- `SHA256SUMS.txt`
+
+此前 `v0.2.0` Release 保持原样，供历史版本使用。
+
+---
+
 # IPoE Simulator v0.2.0
 
 本版本新增独立的手动网卡恢复命令。系统断电或进程异常退出后，可直接从程序默认恢复日志恢复并校验网卡状态，不需要读取拨号配置，也不会检查、安装或加载 Scapy/Npcap。
