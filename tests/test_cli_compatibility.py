@@ -45,6 +45,15 @@ class CliCompatibilityTests(unittest.TestCase):
         self.assertEqual(ipoe_args.log_level, "DEBUG")
         self.assertEqual(coordinator_args.log_level, "INFO")
 
+    def test_coordinator_combined_actions_remain_available(self) -> None:
+        args = coordinator.parser().parse_args(
+            ["--capture", "30", "--extract", "capture.pcap", "--dhcp"]
+        )
+        coordinator.validate_actions(coordinator.parser(), args)
+        self.assertEqual(args.capture, "30")
+        self.assertEqual(args.extract, "capture.pcap")
+        self.assertTrue(args.dhcp)
+
 
 if __name__ == "__main__":
     unittest.main()
