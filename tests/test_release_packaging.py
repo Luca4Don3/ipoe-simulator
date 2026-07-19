@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import struct
 import tempfile
 import unittest
@@ -23,6 +24,24 @@ def fake_pe(machine: int) -> bytes:
 
 
 class ReleasePackagingTests(unittest.TestCase):
+    def test_release_dependency_versions_and_wheel_are_locked(self) -> None:
+        lock = json.loads(
+            (Path(__file__).resolve().parents[1] / "release-dependencies.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(lock["python"]["version"], "3.14.6")
+        self.assertEqual(lock["scapy"]["version"], "2.7.0")
+        requirements = (
+            Path(__file__).resolve().parents[1] / "requirements.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn(lock["scapy"]["url"], requirements)
+        self.assertIn(lock["scapy"]["sha256"], requirements)
+        for architecture in ("x86", "x64", "arm64"):
+            metadata = lock["python"]["architectures"][architecture]
+            self.assertIn("3.14.6", metadata["url"])
+            self.assertRegex(metadata["sha256"], r"^[0-9a-f]{64}$")
+
     def make_archive(
         self,
         directory: Path,

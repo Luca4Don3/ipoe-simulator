@@ -98,8 +98,8 @@ print(json.dumps({"version": list(sys.version_info[:3]), "architecture": archite
             [int] $result.version[1],
             [int] $result.version[2]
         )
-        if ($version -lt [Version]'3.10.0') {
-            throw "Python $version 低于最低版本 3.10"
+        if ($version -lt [Version]'3.9.0' -or $version -ge [Version]'3.15.0') {
+            throw "Python $version 不在支持范围 3.9–3.14"
         }
         if ([string] $result.architecture -ne $RequiredArchitecture) {
             throw "Python 架构 $($result.architecture) 与 Windows 架构 $RequiredArchitecture 不匹配"
@@ -194,7 +194,7 @@ try {
 $python = Find-Python -RequiredArchitecture $requiredArchitecture
 if ($null -eq $python) {
     Stop-Launcher `
-        -Message "未找到 Python 3.10+（$requiredArchitecture）。请使用对应架构的便携包或安装匹配的 Python。" `
+        -Message "未找到 Python 3.9–3.14（$requiredArchitecture）。请使用对应架构的便携包或安装匹配的 Python。" `
         -ExitCode 5
 }
 

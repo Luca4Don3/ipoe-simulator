@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import struct
 import subprocess
@@ -16,6 +18,7 @@ PE_MACHINE = {
     "x64": 0x8664,
     "arm64": 0xAA64,
 }
+ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_FILES = {
     "README.md",
     "LICENSE",
@@ -61,6 +64,14 @@ def read_pe_machine(executable: bytes) -> int:
     return struct.unpack_from("<H", executable, pe_offset + 4)[0]
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def verify_archive(
     archive: Path,
     architecture: str,
@@ -68,6 +79,11 @@ def verify_archive(
     *,
     execute_runtime: bool = False,
 ) -> None:
+    dependency_lock = json.loads(
+        (ROOT / "release-dependencies.json").read_text(encoding="utf-8")
+    )
+    expected_python = str(dependency_lock["python"]["version"])
+    expected_scapy = str(dependency_lock["scapy"]["version"])
     expected_root = f"ipoe-simulator-v{version}-windows-{architecture}"
     expected_machine = PE_MACHINE[architecture]
     with zipfile.ZipFile(archive) as package:
@@ -122,8 +138,10 @@ def verify_archive(
                 [
                     str(root / "runtime" / "python.exe"),
                     "-c",
-                    "import platform, scapy; "
-                    "print(platform.machine()); print(scapy.__version__)",
+                    "import json, platform, scapy, struct, sys; "
+                    "print(json.dumps({'python': platform.python_version(), "
+                    "'scapy': scapy.__version__, 'bits': struct.calcsize('P') * 8, "
+                    "'machine': platform.machine()}))",
                 ],
                 cwd=root,
                 check=False,
@@ -137,9 +155,24 @@ def verify_archive(
                 raise ReleaseVerificationError(
                     f"包内 Python/Scapy 执行验证失败: {detail}"
                 )
-            if "2.6.1" not in result.stdout.splitlines():
+            try:
+                runtime = json.loads(result.stdout.strip())
+            except json.JSONDecodeError as exc:
                 raise ReleaseVerificationError(
-                    f"包内 Scapy 版本不是 2.6.1: {result.stdout.strip()}"
+                    f"包内运行时返回无效 JSON: {result.stdout.strip()}"
+                ) from exc
+            if runtime.get("python") != expected_python:
+                raise ReleaseVerificationError(
+                    f"包内 Python 版本不是 {expected_python}: {runtime!r}"
+                )
+            if runtime.get("scapy") != expected_scapy:
+                raise ReleaseVerificationError(
+                    f"包内 Scapy 版本不是 {expected_scapy}: {runtime!r}"
+                )
+            expected_bits = 32 if architecture == "x86" else 64
+            if runtime.get("bits") != expected_bits:
+                raise ReleaseVerificationError(
+                    f"包内 Python 位数不是 {expected_bits}: {runtime!r}"
                 )
 
 
@@ -164,7 +197,7 @@ def main() -> int:
     except (OSError, zipfile.BadZipFile, ReleaseVerificationError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1
-    print(f"验证通过: {args.archive}")
+    print(f"验证通过: {args.archive} SHA-256={sha256_file(args.archive)}")
     return 0
 
 

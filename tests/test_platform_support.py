@@ -4,13 +4,25 @@ import importlib
 import unittest
 
 from ipoe_simulator.dependencies import (
+    DependencyError,
     classify_windows_architecture,
     linux_distribution_status,
     macos_status,
+    validate_python_version,
 )
 
 
 class ArchitectureTests(unittest.TestCase):
+    def test_python_supported_boundaries(self) -> None:
+        self.assertEqual(validate_python_version((3, 9, 0)), "3.9.0")
+        self.assertEqual(validate_python_version((3, 14, 99)), "3.14.99")
+
+    def test_python_rejects_versions_outside_supported_range(self) -> None:
+        for version in ((3, 8, 20), (3, 15, 0), (2, 7, 18), (4, 0, 0)):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(DependencyError, "需要 Python 3.9–3.14"):
+                    validate_python_version(version)
+
     def test_windows_three_architectures(self) -> None:
         self.assertEqual(classify_windows_architecture("x86", 32), "x86")
         self.assertEqual(classify_windows_architecture("AMD64", 64), "x64")

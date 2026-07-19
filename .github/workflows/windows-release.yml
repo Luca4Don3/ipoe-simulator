@@ -21,11 +21,21 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "${{ matrix.python-version }}"
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Run offline tests
@@ -83,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
       - name: Build and verify portable package
         shell: pwsh
         run: |
@@ -131,19 +141,20 @@ jobs:
             sha256sum *.zip > SHA256SUMS.txt
           )
           test "$(wc -l < .temp/release/SHA256SUMS.txt)" -eq 3
-      - name: Create architecture tags and formal GitHub Releases
+      - name: Create one tag and formal GitHub Release
         shell: bash
         run: |
           version="$(tr -d '\r\n' < VERSION)"
-          for architecture in x86 x64 arm64; do
-            tag="v${version}-windows-${architecture}"
-            archive=".temp/release/ipoe-simulator-v${version}-windows-${architecture}.zip"
-            checksum=".temp/release/SHA256SUMS-${architecture}.txt"
-            sha256sum "$archive" > "$checksum"
-            if gh release view "$tag" >/dev/null 2>&1; then
-              echo "Release ${tag} 已存在；拒绝重复发布。" >&2
-              exit 1
-            fi
-            gh release create "$tag" "$archive" "$checksum" \
-              --target "$GITHUB_SHA" --title "IPoE Simulator ${tag}" --notes-file RELEASE_NOTES.md
-          done
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} 已存在；拒绝重复发布。" >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            .temp/release/ipoe-simulator-v${version}-windows-x86.zip \
+            .temp/release/ipoe-simulator-v${version}-windows-x64.zip \
+            .temp/release/ipoe-simulator-v${version}-windows-arm64.zip \
+            .temp/release/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "IPoE Simulator ${tag}" \
+            --notes-file RELEASE_NOTES.md

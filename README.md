@@ -16,7 +16,7 @@
 - `ipoe-simulator-v0.2.1-windows-x64.zip`
 - `ipoe-simulator-v0.2.1-windows-arm64.zip`
 
-使用同一架构 Release 中的单行 `SHA256SUMS-<arch>.txt` 校验 ZIP。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
+三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.14.6 和 Scapy 2.7.0；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
 
 ## 配置示例
 
@@ -107,10 +107,13 @@ Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧�
 
 ## 权限与依赖
 
-需要 Python 3.10+ 和锁定的 Scapy 2.6.1。`release-dependencies.json` 记录 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256；打包与运行时安装均只接受该清单。
+源码正式支持 Python 3.9、3.10、3.11、3.12、3.13 和 3.14，并锁定 Scapy 2.7.0。Python 3.8 及更低版本、Python 3.15 及更高版本会显式失败。`release-dependencies.json` 记录 Windows 便携 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256；打包与运行时安装均只接受该清单，已安装的 Scapy 版本不匹配也会失败。
+
+Python 3.9 已结束上游安全维护；项目只承诺应用代码兼容，不承诺 Python 3.9 解释器的安全维护。源码支持矩阵与 Windows 包内固定运行时相互独立：Windows Release 仍只提供 Python 3.14.6 的 x86、x64、ARM64 三个附件，不为每个源码支持版本分别打包。
 
 - Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装时回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
 - macOS/Linux 要求 `sudo/root`，程序不会自动提权。
+- macOS 26 不应被视为自带 Python。运行源码前须通过 Command Line Tools 或 Python 官方/可信发行版安装 Python 3.9–3.14；若 `python3` 只是不可用的系统 shim 或解释器缺失，启动器会提示安装，不会静默继续。
 - macOS 使用系统网络工具与系统 `libpcap/BPF`。
 - Linux 使用 PF_PACKET；过滤器编译依赖 `tcpdump`。
 

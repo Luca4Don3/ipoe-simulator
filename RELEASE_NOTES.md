@@ -1,3 +1,13 @@
+# IPoE Simulator v0.4.0
+
+本版本将源码支持范围明确为 Python 3.9–3.14，越界版本会显式失败；依赖升级并锁定到 Scapy 2.7.0。Python 3.9 已 EOL，本项目仅承诺应用兼容性，不承诺解释器安全维护。
+
+Windows 便携附件统一使用 Python 3.14.6，仍发布 x86、x64、ARM64 三个 ZIP。三个附件和 `SHA256SUMS.txt` 位于同一个 `v0.4.0` Release；ARM64 必须在原生 ARM64 runner 或实机完成包内运行验证后才可声明验证完成。
+
+macOS 26 不宣称自带 Python。源码运行前必须通过 Command Line Tools 或独立 Python 发行版提供受支持解释器。
+
+---
+
 # IPoE Simulator v0.2.1
 
 本版本补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，许可证仍为 GPL-3.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
