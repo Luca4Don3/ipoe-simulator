@@ -28,16 +28,13 @@ $WorkDirectory = Join-Path $RootDirectory ".temp\build-windows-$Architecture"
 $PackageName = "ipoe-simulator-v$Version-windows-$Architecture"
 $PackageDirectory = Join-Path $WorkDirectory $PackageName
 $ArchivePath = Join-Path $OutputDirectory "$PackageName.zip"
-$PythonVersion = '3.11.9'
-$ScapyVersion = '2.6.1'
-
-$PythonArchiveNames = @{
-    x86 = "python-$PythonVersion-embed-win32.zip"
-    x64 = "python-$PythonVersion-embed-amd64.zip"
-    arm64 = "python-$PythonVersion-embed-arm64.zip"
-}
-$PythonArchiveName = $PythonArchiveNames[$Architecture]
-$PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/$PythonArchiveName"
+$DependencyLock = Get-Content -LiteralPath (Join-Path $RootDirectory 'release-dependencies.json') -Raw | ConvertFrom-Json
+$PythonVersion = [string]$DependencyLock.python.version
+$ScapyVersion = [string]$DependencyLock.scapy.version
+$PythonMetadata = $DependencyLock.python.architectures.$Architecture
+$PythonUrl = [string]$PythonMetadata.url
+$PythonHash = [string]$PythonMetadata.sha256
+$PythonArchiveName = Split-Path -Leaf $PythonUrl
 $DownloadDirectory = Join-Path $RootDirectory '.temp\downloads'
 $PythonArchive = Join-Path $DownloadDirectory $PythonArchiveName
 
@@ -61,6 +58,7 @@ $rootFiles = @(
     'ipoedhcp.py',
     'recovery_watchdog.py',
     'requirements.txt',
+    'release-dependencies.json',
     'run.cmd'
 )
 foreach ($relativePath in $rootFiles) {
@@ -88,6 +86,10 @@ if (-not (Test-Path -LiteralPath $PythonArchive -PathType Leaf)) {
     Write-Host "下载 Python $PythonVersion $Architecture`: $PythonUrl"
     Invoke-WebRequest -Uri $PythonUrl -OutFile $PythonArchive
 }
+$ActualPythonHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $PythonArchive).Hash.ToLowerInvariant()
+if ($ActualPythonHash -ne $PythonHash.ToLowerInvariant()) {
+    throw "Python runtime SHA-256 不匹配: expected=$PythonHash actual=$ActualPythonHash"
+}
 $RuntimeDirectory = Join-Path $PackageDirectory 'runtime'
 Expand-Archive -LiteralPath $PythonArchive -DestinationPath $RuntimeDirectory
 
@@ -112,7 +114,8 @@ python -m pip install `
     --no-input `
     --no-compile `
     --target $SitePackages `
-    "scapy==$ScapyVersion"
+    --require-hashes `
+    -r (Join-Path $RootDirectory 'requirements.txt')
 if ($LASTEXITCODE -ne 0) {
     throw "Scapy 安装失败，退出码 $LASTEXITCODE"
 }

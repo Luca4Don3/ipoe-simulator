@@ -8,6 +8,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      approve_formal_release:
+        description: "已完成目标 Windows 设备实测与敏感信息审计"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -93,9 +99,8 @@ jobs:
 
   release:
     if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      needs.metadata.outputs.version_changed == 'true'
+      github.event_name == 'workflow_dispatch' &&
+      inputs.approve_formal_release == true
     needs:
       - build
       - metadata
@@ -126,18 +131,19 @@ jobs:
             sha256sum *.zip > SHA256SUMS.txt
           )
           test "$(wc -l < .temp/release/SHA256SUMS.txt)" -eq 3
-      - name: Create tag and formal GitHub Release
+      - name: Create architecture tags and formal GitHub Releases
         shell: bash
         run: |
           version="$(tr -d '\r\n' < VERSION)"
-          tag="v${version}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release ${tag} 已存在；拒绝重复发布。" >&2
-            exit 1
-          fi
-          gh release create "$tag" \
-            .temp/release/*.zip \
-            .temp/release/SHA256SUMS.txt \
-            --target "$GITHUB_SHA" \
-            --title "IPoE Simulator ${tag}" \
-            --notes-file RELEASE_NOTES.md
+          for architecture in x86 x64 arm64; do
+            tag="v${version}-windows-${architecture}"
+            archive=".temp/release/ipoe-simulator-v${version}-windows-${architecture}.zip"
+            checksum=".temp/release/SHA256SUMS-${architecture}.txt"
+            sha256sum "$archive" > "$checksum"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release ${tag} 已存在；拒绝重复发布。" >&2
+              exit 1
+            fi
+            gh release create "$tag" "$archive" "$checksum" \
+              --target "$GITHUB_SHA" --title "IPoE Simulator ${tag}" --notes-file RELEASE_NOTES.md
+          done
