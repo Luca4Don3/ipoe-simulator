@@ -1,15 +1,15 @@
 {
   "device": {
     "mac": "<mac>",
-    "interface": "12"
+    "interface": "<interface>"
   },
   "dhcp_options": {
-    "option12": "STB-HOSTNAME",
-    "option43": "0x01020304",
+    "option12": "<hostname>",
+    "option43": "<option43_hex>",
     "option50": "",
-    "option60": "ITV-STB",
-    "option61": "0x01aabbccddeeff",
-    "option125": "0x01020304"
+    "option60": "<vendor_class>",
+    "option61": "<option61_hex>",
+    "option125": "<option125_hex>"
   },
   "capture": {
     "pcap_file": "",
