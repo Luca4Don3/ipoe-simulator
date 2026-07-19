@@ -4,7 +4,7 @@
     "architectures": {
       "x86": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-win32.zip", "sha256": "daf24de7fb3b173e94e56a201d3f38dfedebbdc7ed1925f7aeb8ed588e2b4189"},
       "x64": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip", "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"},
-      "arm64": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-arm64.zip", "sha256": "679df9f89947aefb283d410746b08fc5d786e77bcfa496dd14997f02ece2ffe7"}
+      "arm64": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-arm64.zip", "sha256": "1a6dae49d15320270a7141f93b574ff7686a7a526efa65e63ddbebf9b409929a"}
     }
   },
   "scapy": {"version": "2.6.1", "url": "https://files.pythonhosted.org/packages/df/0f/b3a0b60fc2c4b9f654b8c5c69eef0143f2f8e0773a6dcf1d4c8235228e2f/scapy-2.6.1-py3-none-any.whl", "sha256": "7600d7e2383c853e5c3a6e05d37e17643beebf2b3e10d7914dffcc3bc3c6e6c5"},
