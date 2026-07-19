@@ -21,13 +21,66 @@ JOURNAL_SCHEMA = 2
 LOGGER = get_logger("transaction")
 
 
+class JournalLockedError(NetworkStateError):
+    """默认恢复日志正在由另一个实例持有。"""
+
+
+class JournalLock:
+    def __init__(self, journal: Path):
+        self.path = journal.with_suffix(journal.suffix + ".lock")
+        self.handle: Any | None = None
+
+    def acquire(self) -> None:
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.handle = self.path.open("a+", encoding="utf-8")
+            if os.name == "nt":
+                import msvcrt
+                self.handle.seek(0)
+                if self.handle.tell() == 0:
+                    self.handle.write(" ")
+                    self.handle.flush()
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.handle.seek(0)
+            self.handle.truncate()
+            self.handle.write(str(os.getpid()))
+            self.handle.flush()
+        except OSError as exc:
+            self.release()
+            owner = "unknown"
+            try:
+                owner = self.path.read_text(encoding="utf-8").strip() or owner
+            except OSError:
+                pass
+            raise JournalLockedError(f"恢复日志正由 PID {owner} 使用，拒绝修改网卡/journal") from exc
+
+    def release(self) -> None:
+        if self.handle is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        self.handle.close()
+        self.handle = None
+
+
 def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temp_name = tempfile.mkstemp(
-        prefix=path.name + ".",
-        suffix=".tmp",
-        dir=path.parent,
-    )
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, temp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    except OSError as exc:
+        raise NetworkStateError(f"无法创建恢复日志 {path}: {exc}") from exc
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
             json.dump(data, stream, indent=2, ensure_ascii=False)
@@ -35,12 +88,14 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
-    except Exception:
+    except Exception as exc:
         try:
             os.unlink(temp_name)
         except OSError:
             pass
-        raise
+        if isinstance(exc, NetworkStateError):
+            raise
+        raise NetworkStateError(f"无法写入恢复日志 {path}: {exc}") from exc
 
 
 def _default_backend() -> NetworkBackend:
@@ -94,6 +149,19 @@ def restore_from_journal(
     backend: NetworkBackend | None = None,
 ) -> None:
     path = Path(journal_path).resolve()
+    lock = JournalLock(path)
+    lock.acquire()
+    try:
+        _restore_from_journal_locked(path, backend=backend)
+    finally:
+        lock.release()
+
+
+def _restore_from_journal_locked(
+    path: Path,
+    *,
+    backend: NetworkBackend | None = None,
+) -> None:
     if not path.exists():
         return
     LOGGER.info("检测到待恢复日志 journal=%s", path)
@@ -150,6 +218,7 @@ class NetworkTransaction:
     snapshot: dict[str, Any]
     app_ip: str | None = None
     _watchdog_writer: int | None = field(default=None, repr=False)
+    _journal_lock: JournalLock | None = field(default=None, repr=False)
 
     @classmethod
     def begin(
@@ -166,20 +235,26 @@ class NetworkTransaction:
             )
         selected = backend or _default_backend()
         path = Path(journal_path).resolve()
+        lock = JournalLock(path)
+        lock.acquire()
         LOGGER.info(
             "事务开始 platform=%s interface_index=%s journal=%s",
             selected.platform_name,
             interface.index,
             path,
         )
-        if path.exists():
-            restore_from_journal(path, backend=selected)
-        snapshot = selected.capture_snapshot(interface)
-        transaction = cls(interface, path, selected, snapshot)
-        transaction._write("snapshot_saved")
-        if start_watchdog:
-            transaction._start_watchdog()
         try:
+            if path.exists():
+                _restore_from_journal_locked(path, backend=selected)
+            snapshot = selected.capture_snapshot(interface)
+        except Exception:
+            lock.release()
+            raise
+        transaction = cls(interface, path, selected, snapshot, _journal_lock=lock)
+        try:
+            transaction._write("snapshot_saved")
+            if start_watchdog:
+                transaction._start_watchdog()
             selected.prepare(interface, snapshot)
             transaction._write("interface_prepared")
         except Exception:
@@ -302,6 +377,12 @@ class NetworkTransaction:
         )
         try:
             if self.journal_path.exists():
-                restore_from_journal(self.journal_path, backend=self.backend)
+                if self._journal_lock is None:
+                    restore_from_journal(self.journal_path, backend=self.backend)
+                else:
+                    _restore_from_journal_locked(self.journal_path, backend=self.backend)
         finally:
             self._close_watchdog()
+            if self._journal_lock:
+                self._journal_lock.release()
+                self._journal_lock = None

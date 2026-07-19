@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import secrets
 from pathlib import Path
 
 from .interfaces import InterfaceInfo
@@ -11,7 +12,7 @@ class CaptureError(RuntimeError):
 
 
 def default_capture_path(project_root: Path) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f") + "-" + secrets.token_hex(4)
     return project_root / ".temp" / f"dhcp-{stamp}.pcap"
 
 
@@ -24,6 +25,8 @@ def capture_dhcp(interface: InterfaceInfo, duration: int, output_path: str | Pat
         raise CaptureError("需要 Scapy: python -m pip install -r requirements.txt") from exc
 
     output = Path(output_path).resolve()
+    if output.exists():
+        raise CaptureError(f"拒绝覆盖已有抓包文件: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
         packets = sniff(
