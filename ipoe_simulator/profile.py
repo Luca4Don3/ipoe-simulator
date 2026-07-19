@@ -52,9 +52,14 @@ def option_bytes(value: str, code: int) -> bytes:
         return b""
     if value.lower().startswith("0x"):
         try:
-            return bytes.fromhex(value[2:])
+            raw = bytes.fromhex(value[2:])
         except ValueError as exc:
             raise ConfigError(f"Option {code} 的十六进制值无效") from exc
+        if code == 50 and len(raw) != 4:
+            raise ConfigError("Option 50 的十六进制值必须恰好包含 4 个字节")
+        if len(raw) > 255:
+            raise ConfigError(f"Option {code} 不能超过 255 个字节")
+        return raw
     if code == 50:
         parts = value.split(".")
         if len(parts) != 4:
@@ -66,7 +71,10 @@ def option_bytes(value: str, code: int) -> bytes:
         if any(octet < 0 or octet > 255 for octet in octets):
             raise ConfigError("Option 50 的 IPv4 字段超出 0-255")
         return bytes(octets)
-    return value.encode("utf-8")
+    raw = value.encode("utf-8")
+    if len(raw) > 255:
+        raise ConfigError(f"Option {code} 不能超过 255 个字节")
+    return raw
 
 
 def format_option(value: Any) -> str:
@@ -147,7 +155,7 @@ class Config:
     def log_directory(self, project_root: str | os.PathLike[str]) -> Path:
         value = self.get("logging", "directory", default="")
         if value in (None, ""):
-            return Path(project_root).resolve()
+            return Path(project_root).resolve() / ".temp" / "logs"
         if not isinstance(value, str):
             raise ConfigError("logging.directory 必须是字符串路径")
         path = Path(value).expanduser()
