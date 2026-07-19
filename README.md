@@ -16,13 +16,11 @@
 - `ipoe-simulator-v0.2.1-windows-x64.zip`
 - `ipoe-simulator-v0.2.1-windows-arm64.zip`
 
-使用同一 Release 中的 `SHA256SUMS.txt` 校验下载文件。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy，只提供 `run.cmd`，不包含 `run.sh`。Npcap 不随包分发，仍从官方地址下载并在安装前校验 Authenticode 签名。
-
-GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 无法关闭，仅供开发者使用，不包含便携运行时；普通用户应下载上述平台附件。
+使用同一架构 Release 中的单行 `SHA256SUMS-<arch>.txt` 校验 ZIP。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.11.9 和固定版本 Scapy；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
 
 ## 配置示例
 
-`config.example.json` 是现有配置结构的参考。复制后请替换所有尖括号占位符；不要把占位符直接用于真实拨号。
+`config.example.json` 是现有配置结构的参考。复制后请替换所有占位符；不要把占位符直接用于真实拨号。
 
 最小配置（只指定接口和机顶盒 MAC）：
 
@@ -70,7 +68,7 @@ GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 无法关�
 }
 ```
 
-DHCP 选项格式与边界：Option 12 是 UTF-8 主机名；Option 43、61、125 使用 `0x` 开头的连续十六进制字节串；Option 50 是 IPv4 地址（或 `0x` 加 4 个字节）；Option 60 是 UTF-8 厂商类字符串。未使用的选项留空。选项内容通常来自授权网络中机顶盒的 DHCP Discover/Request 抓包，优先使用 `extract_params.py` 提取并人工复核；不要猜测、拼接或照搬其他用户的标识。Option 43/125 的内部 TLV 和厂商编码没有通用标准，必须按实际网络资料解释。
+DHCP 选项格式：Option 12 是 UTF-8 主机名；Option 43、61、125 使用 `0x` 开头的连续十六进制字节串；Option 50 是 IPv4 地址（或 `0x` 加 4 个字节）；Option 60 是 UTF-8 厂商类字符串。未使用的选项留空。选项内容通常来自授权网络中机顶盒的 DHCP Discover/Request 抓包，优先使用 `extract_params.py` 提取并人工复核；不要猜测、拼接或照搬其他用户的标识。Option 43/125 的内部 TLV 和厂商编码没有通用标准，必须按实际网络资料解释。
 
 ## 安全使用与失败处理
 
@@ -82,15 +80,11 @@ PCAP、日志和恢复日志可能包含 MAC、IP、接口名称、厂商标识�
 
 ## 代码适配范围
 
-- Windows 10/11 x86（正式支持）；
+- Windows 10 x86（正式支持）；
 - Windows 10/11 x64（正式支持）；
 - Windows 10/11 ARM64（正式支持）；
 - macOS 14、15、26，Intel x86_64 与 Apple Silicon；
-- RHEL/CentOS 6.5+；
-- Ubuntu 12.04 LTS+；
-- SLES 11 SP3+；
-- openSUSE 13.1+；
-- 其他满足能力检测的现代 Linux。
+- Linux 为未交付 runtime、未实机验证的适配目标。
 
 遗留 Linux 只支持 x86_64，必须使用 `/opt/ipoe-simulator/runtime` 内随部署包提供的 Python 3.11 + Scapy。现代 Linux 支持 x86_64 和 aarch64。源码仓库不包含跨发行版 Python 二进制包；缺少指定 runtime 时程序会显式失败，不会退回系统旧版 Python。
 
@@ -113,7 +107,7 @@ Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧�
 
 ## 权限与依赖
 
-需要 Python 3.10+ 和 Scapy 2.5+。遗留 Linux 固定使用部署 runtime 中的 Python 3.11。
+需要 Python 3.10+ 和锁定的 Scapy 2.6.1。`release-dependencies.json` 记录 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256；打包与运行时安装均只接受该清单。
 
 - Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装时回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
 - macOS/Linux 要求 `sudo/root`，程序不会自动提权。
@@ -129,7 +123,7 @@ python3 check_env.py
 python3 check_env.py --json
 ```
 
-POSIX 环境检测不会安装依赖，也不会修改网卡。Windows 维持原有 Scapy 自动安装行为。
+所有平台的环境检测均不会安装依赖，也不会修改网卡；抓包或拨号才会安装已锁定依赖。
 
 ## 使用
 

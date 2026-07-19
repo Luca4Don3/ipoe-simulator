@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
+import json
 import os
 import platform
 import re
@@ -19,9 +21,39 @@ class DependencyError(RuntimeError):
     pass
 
 
-NPCAP_URL = "https://npcap.com/dist/npcap-1.79.exe"
+ROOT = Path(__file__).resolve().parents[1]
+LOCK_FILE = ROOT / "release-dependencies.json"
 LEGACY_LINUX_RUNTIME = Path("/opt/ipoe-simulator/runtime")
 LEGACY_LINUX_STATE = Path("/var/lib/ipoe-simulator")
+
+
+def release_dependencies() -> dict[str, Any]:
+    try:
+        data = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DependencyError(f"无法读取发布依赖清单 {LOCK_FILE}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise DependencyError("发布依赖清单根节点必须是对象")
+    return data
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _verified_download(url: str, expected_sha256: str, destination: Path) -> None:
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response, destination.open("wb") as stream:
+            shutil.copyfileobj(response, stream)
+        actual = _sha256_file(destination)
+    except (OSError, urllib.error.URLError, TimeoutError) as exc:
+        raise DependencyError(f"依赖下载失败: {exc}") from exc
+    if actual.lower() != expected_sha256.lower():
+        raise DependencyError(f"依赖 SHA-256 不匹配: 期望 {expected_sha256}，实际 {actual}")
 
 
 def classify_windows_architecture(
@@ -251,7 +283,9 @@ def ensure_scapy(auto_install: bool = True) -> str:
             "install",
             "--disable-pip-version-check",
             "--no-input",
-            "scapy>=2.5,<3",
+            "--require-hashes",
+            "-r",
+            str(ROOT / "requirements.txt"),
         ],
         capture_output=True,
         text=True,
@@ -305,12 +339,20 @@ def install_npcap() -> str:
     current, detail = npcap_status()
     if current:
         return detail
-    installer = Path(tempfile.gettempdir()) / "ipoe-simulator-npcap-installer.exe"
+    lock = release_dependencies()["npcap"]
+    installer = Path(tempfile.gettempdir()) / f"ipoe-simulator-npcap-{lock['version']}.exe"
     try:
-        with urllib.request.urlopen(NPCAP_URL, timeout=60) as response, installer.open("wb") as stream:
-            shutil.copyfileobj(response, stream)
+        _verified_download(str(lock["url"]), str(lock["sha256"]), installer)
         if not _authenticode_valid(installer):
             raise DependencyError("Npcap 安装包签名验证失败，已拒绝执行")
+        # Authenticode 的 Valid 状态必须对应锁定的官方发布者。
+        from .powershell_runtime import get_powershell_runtime
+        publisher = get_powershell_runtime().run(
+            f"(Get-AuthenticodeSignature -LiteralPath '{str(installer).replace(chr(39), chr(39) * 2)}').SignerCertificate.Subject",
+            timeout=30,
+        )
+        if str(lock["publisher"]).lower() not in publisher.lower():
+            raise DependencyError(f"Npcap 签名发布者不匹配: {publisher or 'unknown'}")
         result = subprocess.run([str(installer), "/S"], capture_output=True, text=True, timeout=300, check=False)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "未知安装器错误").strip()

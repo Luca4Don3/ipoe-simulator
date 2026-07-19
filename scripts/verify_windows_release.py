@@ -25,6 +25,7 @@ REQUIRED_FILES = {
     "config.example.json",
     "coordinator.py",
     "run.cmd",
+    "release-dependencies.json",
     "runtime/python.exe",
     "runtime/LICENSE.txt",
     "runtime/Lib/site-packages/scapy/__init__.py",
