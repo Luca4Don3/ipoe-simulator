@@ -1,12 +1,12 @@
 {
   "python": {
-    "version": "3.11.9",
+    "version": "3.14.6",
     "architectures": {
-      "x86": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-win32.zip", "sha256": "daf24de7fb3b173e94e56a201d3f38dfedebbdc7ed1925f7aeb8ed588e2b4189"},
-      "x64": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip", "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"},
-      "arm64": {"url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-arm64.zip", "sha256": "1a6dae49d15320270a7141f93b574ff7686a7a526efa65e63ddbebf9b409929a"}
+      "x86": {"url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embeddable-win32.zip", "sha256": "e5843719d78cd68b382683b16defbbc587c1c52bba758b612536bece3bdb94ab"},
+      "x64": {"url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embeddable-amd64.zip", "sha256": "c3a89aa7ead530bcac4729f3db7d000fbadb6ca7aa0461c2841867172aa0752a"},
+      "arm64": {"url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embeddable-arm64.zip", "sha256": "ac4e2953d906eee3d6c5c274f224dd1075bf86cb189bf6247aa9eef062410e4f"}
     }
   },
-  "scapy": {"version": "2.6.1", "url": "https://files.pythonhosted.org/packages/df/0f/b3a0b60fc2c4b9f654b8c5c69eef0143f2f8e0773a6dcf1d4c8235228e2f/scapy-2.6.1-py3-none-any.whl", "sha256": "7600d7e2383c853e5c3a6e05d37e17643beebf2b3e10d7914dffcc3bc3c6e6c5"},
+  "scapy": {"version": "2.7.0", "url": "https://files.pythonhosted.org/packages/f0/6f/bd32e5e8adc391063858da17271bb444e4b009842cffa593bca8b2b78af7/scapy-2.7.0-py3-none-any.whl", "sha256": "eb22786da92be6fd8e5c694ae5595e4f5b9ac1f4364c9c45986844f3e3063561"},
   "npcap": {"version": "1.88", "url": "https://npcap.com/dist/npcap-1.88.exe", "sha256": "a2f4ec1e5ea353ff67efd24b2ebf081ba44532410fae8d5e146af0310aa4f56b", "publisher": "Insecure.Com LLC"}
 }

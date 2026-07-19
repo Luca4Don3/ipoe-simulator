@@ -22,6 +22,7 @@ from ipoe_simulator.dependencies import (
     npcap_status,
     package_manager,
     windows_architecture,
+    validate_python_version,
 )
 from ipoe_simulator.interfaces import InterfaceError, list_interfaces
 from ipoe_simulator.platform_network import default_state_directory
@@ -183,8 +184,10 @@ def run() -> tuple[bool, dict[str, object]]:
     ok = _platform_checks(checks)
     version = sys.version_info
     checks["python"] = f"{version.major}.{version.minor}.{version.micro}"
-    if (version.major, version.minor) < (3, 10):
-        checks["python_error"] = "需要 Python 3.10+"
+    try:
+        validate_python_version()
+    except DependencyError as exc:
+        checks["python_error"] = str(exc)
         ok = False
 
     admin = is_admin()

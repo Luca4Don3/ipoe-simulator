@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCK_FILE = ROOT / "release-dependencies.json"
 LEGACY_LINUX_RUNTIME = Path("/opt/ipoe-simulator/runtime")
 LEGACY_LINUX_STATE = Path("/var/lib/ipoe-simulator")
+MINIMUM_PYTHON = (3, 9)
+MAXIMUM_PYTHON = (3, 14)
+SUPPORTED_PYTHON = "3.9–3.14"
 
 
 def release_dependencies() -> dict[str, Any]:
@@ -35,6 +38,19 @@ def release_dependencies() -> dict[str, Any]:
     if not isinstance(data, dict):
         raise DependencyError("发布依赖清单根节点必须是对象")
     return data
+
+
+def validate_python_version(
+    version_info: tuple[int, ...] | None = None,
+) -> str:
+    version = tuple(version_info or sys.version_info[:3])
+    major_minor = version[:2]
+    if major_minor < MINIMUM_PYTHON or major_minor > MAXIMUM_PYTHON:
+        actual = ".".join(str(part) for part in version[:3])
+        raise DependencyError(
+            f"不支持 Python {actual}；需要 Python {SUPPORTED_PYTHON}"
+        )
+    return ".".join(str(part) for part in version[:3])
 
 
 def _sha256_file(path: Path) -> str:
@@ -268,10 +284,16 @@ def ensure_linux_base_dependencies(auto_install: bool = True) -> dict[str, Any]:
 
 
 def ensure_scapy(auto_install: bool = True) -> str:
+    expected = str(release_dependencies()["scapy"]["version"])
     try:
         import scapy
 
-        return str(getattr(scapy, "__version__", "unknown"))
+        actual = str(getattr(scapy, "__version__", "unknown"))
+        if actual != expected:
+            raise DependencyError(
+                f"Scapy 版本不匹配: 需要 {expected}，实际 {actual}"
+            )
+        return actual
     except ImportError:
         if not auto_install:
             raise DependencyError("Scapy 未安装")
@@ -298,7 +320,12 @@ def ensure_scapy(auto_install: bool = True) -> str:
     try:
         import scapy
 
-        return str(getattr(scapy, "__version__", "unknown"))
+        actual = str(getattr(scapy, "__version__", "unknown"))
+        if actual != expected:
+            raise DependencyError(
+                f"Scapy 安装后版本不匹配: 需要 {expected}，实际 {actual}"
+            )
+        return actual
     except ImportError as exc:
         raise DependencyError("Scapy 安装命令成功但仍无法导入，请检查 Python 环境") from exc
 
@@ -380,8 +407,7 @@ def is_admin() -> bool:
 
 
 def ensure_runtime(auto_install: bool = True, require_admin: bool = True) -> dict[str, object]:
-    if sys.version_info < (3, 10):
-        raise DependencyError("需要 Python 3.10+；遗留 Linux 必须使用自带 Python 3.11 runtime")
+    validate_python_version()
     admin = is_admin()
     if require_admin and not admin:
         if os.name == "nt":

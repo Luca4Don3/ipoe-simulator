@@ -39,7 +39,17 @@ if [ "$(uname -s)" = "Linux" ] && [ -r /etc/os-release ]; then
 fi
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1 && [ ! -x "$PYTHON_BIN" ]; then
-    echo "错误: 找不到 Python 运行时: $PYTHON_BIN" >&2
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo "错误: 找不到 Python 运行时: $PYTHON_BIN；请安装 Command Line Tools 或 Python 3.9–3.14" >&2
+    else
+        echo "错误: 找不到 Python 运行时: $PYTHON_BIN" >&2
+    fi
+    exit 5
+fi
+
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if (3, 9) <= sys.version_info[:2] <= (3, 14) else 1)'; then
+    PYTHON_VERSION=$("$PYTHON_BIN" -c 'import platform; print(platform.python_version())' 2>/dev/null || printf 'unknown')
+    echo "错误: 不支持 Python $PYTHON_VERSION；需要 Python 3.9–3.14" >&2
     exit 5
 fi
 
