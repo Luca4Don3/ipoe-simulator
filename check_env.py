@@ -198,8 +198,8 @@ def run() -> tuple[bool, dict[str, object]]:
         ok = False
 
     try:
-        # Windows 维持原有自动安装行为；POSIX 环境检测保持只读。
-        checks["scapy"] = ensure_scapy(auto_install=os.name == "nt")
+        # 环境检测在所有平台只读；拨号/抓包路径才允许安装锁定依赖。
+        checks["scapy"] = ensure_scapy(auto_install=False)
     except Exception as exc:
         checks["scapy_error"] = str(exc)
         ok = False

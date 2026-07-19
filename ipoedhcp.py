@@ -5,7 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
+from ipoe_simulator.app_logging import LOG_LEVELS, LoggingError, configure_logging, get_logger
 from ipoe_simulator.capture import CaptureError, capture_dhcp, default_capture_path
 from ipoe_simulator.dhcp_client import DhcpClient, DhcpError
 from ipoe_simulator.dependencies import DependencyError, ensure_runtime, is_admin
@@ -25,6 +25,16 @@ JOURNAL = default_journal_path(ROOT)
 LOGGER = get_logger("cli")
 
 
+def _timeout(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timeout 必须是整数") from exc
+    if not 1 <= result <= 300:
+        raise argparse.ArgumentTypeError("timeout 必须在 1-300 秒之间")
+    return result
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="IPoE DHCP Simulator")
     actions = parser.add_mutually_exclusive_group()
@@ -37,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument(f"--option{code}")
     parser.add_argument("--config", "-c", default=str(DEFAULT_CONFIG), help="JSON 配置文件")
     parser.add_argument("--capture-output", help="抓包输出路径，默认写入 .temp")
-    parser.add_argument("--timeout", type=int, default=8, help="Offer/ACK 等待秒数")
+    parser.add_argument("--timeout", type=_timeout, default=8, help="Offer/ACK 等待秒数（1-300）")
     parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return parser
 
@@ -129,8 +139,8 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
         if config.get("behavior", "auto_renew", default=True):
             client.renew_forever()
         else:
-            while True:
-                client.stop_event.wait(3600)
+            LOGGER.info("auto_renew=false；租约到期后将自动恢复网卡")
+            client.wait_until_expiry()
     except KeyboardInterrupt:
         LOGGER.info("收到停止请求")
         client.stop()
@@ -187,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
             configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("抓包失败 error=%s", exc)
         return 3
-    except (NetworkStateError, DependencyError) as exc:
+    except (NetworkStateError, DependencyError, LoggingError, OSError) as exc:
         if not logging_ready:
             configure_logging(level_name=args.log_level, log_directory=ROOT)
         LOGGER.error("网络错误 error=%s", exc)
