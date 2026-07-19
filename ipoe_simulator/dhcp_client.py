@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import ipaddress
 import struct
 import threading
 import time
@@ -43,6 +44,7 @@ class DhcpReply:
     dns_servers: list[str]
     lease_time: int
     renewal_time: int
+    rebinding_time: int
 
 
 @dataclass
@@ -54,6 +56,8 @@ class Lease:
     dns_servers: list[str]
     lease_time: int
     renewal_time: int
+    rebinding_time: int
+    acquired_at: float
 
 
 def _message_type(options: list[Any]) -> int | None:
@@ -86,12 +90,15 @@ def _ipv4(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
-        return value
+        try:
+            return str(ipaddress.IPv4Address(value))
+        except ipaddress.AddressValueError:
+            return None
     if isinstance(value, bytes) and len(value) >= 4:
         return ".".join(str(part) for part in value[:4])
     if isinstance(value, (list, tuple)) and value:
         return _ipv4(value[0])
-    return str(value)
+    return _ipv4(str(value)) if value is not None else None
 
 
 def _u32(value: Any, default: int) -> int:
@@ -233,6 +240,16 @@ class DhcpClient:
             destination_ip=self.lease.server_id,
         )
 
+    def _rebind(self) -> Any:
+        if self.lease is None:
+            raise DhcpError("尚未获得租约")
+        bootp = self._bootp(xid=self.xid, flags=0x8000, ciaddr=self.lease.ip_address,
+                            yiaddr="0.0.0.0", siaddr="0.0.0.0", giaddr="0.0.0.0")
+        options = [("message-type", "request")]
+        options.extend(self._profile_options(include_requested_ip=False))
+        options.extend((("param_req_list", [1, 3, 6, 51, 54, 58, 59]), "end"))
+        return self._packet(bootp, options, source_ip=self.lease.ip_address)
+
     def _release(self) -> Any:
         if self.lease is None:
             return None
@@ -271,7 +288,12 @@ class DhcpClient:
             dns_value = [dns_value] if dns_value else []
         dns_servers = [item for item in (_ipv4(value) for value in dns_value) if item]
         lease_time = _u32(values.get("lease_time", values.get(51)), 2400)
-        renewal_time = _u32(values.get("renewal_time", values.get(58)), max(lease_time // 2, 60))
+        if lease_time <= 0:
+            return None
+        renewal_time = _u32(values.get("renewal_time", values.get(58)), max(lease_time // 2, 1))
+        rebinding_time = _u32(values.get("rebinding_time", values.get(59)), max((lease_time * 7) // 8, 1))
+        renewal_time = min(max(renewal_time, 1), lease_time - 1) if lease_time > 1 else 1
+        rebinding_time = min(max(rebinding_time, renewal_time), lease_time - 1) if lease_time > 1 else 1
         return DhcpReply(
             message_type=message_type,
             offered_ip=str(bootp.yiaddr),
@@ -281,9 +303,10 @@ class DhcpClient:
             dns_servers=dns_servers,
             lease_time=lease_time,
             renewal_time=renewal_time,
+            rebinding_time=rebinding_time,
         )
 
-    def _exchange(self, packet: Any, expected: set[int], label: str) -> DhcpReply:
+    def _exchange(self, packet: Any, expected: set[int], label: str, server_id: str | None = None) -> DhcpReply:
         ready = threading.Event()
         received = threading.Event()
         reply: list[DhcpReply] = []
@@ -291,6 +314,8 @@ class DhcpClient:
         def handle(candidate: Any) -> None:
             parsed = self._parse_reply(candidate)
             if parsed is None or parsed.message_type not in expected | {6}:
+                return
+            if server_id and parsed.server_id != server_id:
                 return
             reply.append(parsed)
             received.set()
@@ -335,18 +360,19 @@ class DhcpClient:
             offer.offered_ip,
             offer.server_id,
         )
-        ack = self._exchange(self._request(offer.offered_ip, offer.server_id), {5}, "ACK")
-        if not ack.subnet_mask:
+        ack = self._exchange(self._request(offer.offered_ip, offer.server_id), {5}, "ACK", offer.server_id)
+        if not ack.subnet_mask or ack.server_id != offer.server_id or ack.offered_ip != offer.offered_ip:
             raise DhcpError("ACK 缺少子网掩码，拒绝修改网卡")
-        server_id = ack.server_id or offer.server_id
         self.lease = Lease(
-            ip_address=ack.offered_ip or offer.offered_ip,
-            server_id=server_id,
+            ip_address=ack.offered_ip,
+            server_id=ack.server_id,
             subnet_mask=ack.subnet_mask,
             gateway=ack.gateway,
             dns_servers=ack.dns_servers,
             lease_time=ack.lease_time,
-            renewal_time=max(ack.renewal_time, 60),
+            renewal_time=ack.renewal_time,
+            rebinding_time=ack.rebinding_time,
+            acquired_at=time.monotonic(),
         )
         LOGGER.info(
             "DHCP ACK ip=%s subnet_mask=%s gateway=%s dns_servers=%s lease_seconds=%s renewal_seconds=%s",
@@ -359,23 +385,52 @@ class DhcpClient:
         )
         return self.lease
 
+    def _update_lease(self, ack: DhcpReply) -> None:
+        if self.lease is None or not ack.subnet_mask or not ack.server_id or not ack.offered_ip:
+            raise DhcpError("续租 ACK 缺少租约字段")
+        self.lease = Lease(ack.offered_ip, ack.server_id, ack.subnet_mask, ack.gateway,
+                           ack.dns_servers, ack.lease_time, ack.renewal_time,
+                           ack.rebinding_time, time.monotonic())
+
+    def wait_until_expiry(self) -> None:
+        if self.lease is None:
+            raise DhcpError("尚未获得租约")
+        self.stop_event.wait(self.lease.lease_time)
+        if not self.stop_event.is_set():
+            LOGGER.warning("DHCP 租约已到期，停止发送 DHCP 并恢复网卡")
+
     def renew_forever(self) -> None:
         if self.lease is None:
             raise DhcpError("尚未获得租约")
-        while not self.stop_event.wait(self.lease.renewal_time):
+        while not self.stop_event.is_set():
+            lease = self.lease
+            assert lease is not None
+            now = time.monotonic()
+            t2_at = lease.acquired_at + lease.rebinding_time
+            expiry = lease.acquired_at + lease.lease_time
+            phase = "续租"
+            if now < lease.acquired_at + lease.renewal_time:
+                self.stop_event.wait(lease.acquired_at + lease.renewal_time - now)
+                continue
+            if now >= expiry:
+                LOGGER.warning("DHCP 租约已到期，恢复网卡")
+                return
+            expected_server = lease.server_id if now < t2_at else None
+            phase = "续租" if expected_server else "rebind"
             self.xid = struct.unpack("!I", os.urandom(4))[0]
-            LOGGER.info("DHCP 续租开始 xid=0x%08x", self.xid)
+            packet = self._renew() if expected_server else self._rebind()
+            LOGGER.info("DHCP %s开始 xid=0x%08x", phase, self.xid)
             try:
-                ack = self._exchange(self._renew(), {5}, "续租 ACK")
-                self.lease.lease_time = ack.lease_time
-                self.lease.renewal_time = max(ack.renewal_time, 60)
-                LOGGER.info(
-                    "DHCP 续租成功 lease_seconds=%s renewal_seconds=%s",
-                    self.lease.lease_time,
-                    self.lease.renewal_time,
-                )
+                ack = self._exchange(packet, {5}, f"{phase} ACK", expected_server)
+                self._update_lease(ack)
+                LOGGER.info("DHCP %s成功 lease_seconds=%s", phase, self.lease.lease_time)
             except DhcpError as exc:
-                LOGGER.warning("DHCP 续租失败，将继续保持当前租约 error=%s", exc)
+                if "NAK" in str(exc):
+                    LOGGER.warning("DHCP 收到有效 NAK，立即使租约失效并恢复网卡")
+                    return
+                remaining = max(0.0, min(expiry, t2_at if expected_server else expiry) - time.monotonic())
+                LOGGER.warning("DHCP %s失败，将有界重试 error=%s", phase, exc)
+                self.stop_event.wait(min(5.0, remaining))
 
     def stop(self) -> None:
         self.stop_event.set()
