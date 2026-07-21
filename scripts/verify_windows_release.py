@@ -3,12 +3,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
-import os
 import struct
-import subprocess
 import sys
-import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -18,7 +14,6 @@ PE_MACHINE = {
     "x64": 0x8664,
     "arm64": 0xAA64,
 }
-ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_FILES = {
     "README.md",
     "LICENSE",
@@ -29,9 +24,6 @@ REQUIRED_FILES = {
     "coordinator.py",
     "run.cmd",
     "release-dependencies.json",
-    "runtime/python.exe",
-    "runtime/LICENSE.txt",
-    "runtime/Lib/site-packages/scapy/__init__.py",
     "licenses/SCAPY-LICENSE.txt",
     "scripts/windows_launcher.ps1",
 }
@@ -79,13 +71,7 @@ def verify_archive(
     *,
     execute_runtime: bool = False,
 ) -> None:
-    dependency_lock = json.loads(
-        (ROOT / "release-dependencies.json").read_text(encoding="utf-8")
-    )
-    expected_python = str(dependency_lock["python"]["version"])
-    expected_scapy = str(dependency_lock["scapy"]["version"])
     expected_root = f"ipoe-simulator-v{version}-windows-{architecture}"
-    expected_machine = PE_MACHINE[architecture]
     with zipfile.ZipFile(archive) as package:
         files = {
             PurePosixPath(name)
@@ -113,12 +99,12 @@ def verify_archive(
             if relative.suffix in {".pyc", ".log"}:
                 raise ReleaseVerificationError(f"ZIP 包含禁止文件类型: {relative}")
 
-        python_path = f"{expected_root}/runtime/python.exe"
-        actual_machine = read_pe_machine(package.read(python_path))
-        if actual_machine != expected_machine:
+        runtime_files = [
+            path for path in relative_files if path.startswith("runtime/")
+        ]
+        if runtime_files:
             raise ReleaseVerificationError(
-                "runtime/python.exe 架构不匹配: "
-                f"期望 0x{expected_machine:04x}，实际 0x{actual_machine:04x}"
+                f"轻量包不应携带 Python runtime: {runtime_files[0]}"
             )
 
         version_value = package.read(f"{expected_root}/VERSION").decode("utf-8").strip()
@@ -126,54 +112,10 @@ def verify_archive(
             raise ReleaseVerificationError(
                 f"VERSION 应为 {version!r}，实际为 {version_value!r}"
             )
-
     if execute_runtime:
-        if os.name != "nt":
-            raise ReleaseVerificationError("--execute-runtime 只能在 Windows 上使用")
-        with tempfile.TemporaryDirectory(prefix="ipoe-release-verify-") as directory:
-            with zipfile.ZipFile(archive) as package:
-                package.extractall(directory)
-            root = Path(directory) / expected_root
-            result = subprocess.run(
-                [
-                    str(root / "runtime" / "python.exe"),
-                    "-c",
-                    "import json, platform, scapy, struct, sys; "
-                    "print(json.dumps({'python': platform.python_version(), "
-                    "'scapy': scapy.__version__, 'bits': struct.calcsize('P') * 8, "
-                    "'machine': platform.machine()}))",
-                ],
-                cwd=root,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if result.returncode != 0:
-                detail = (result.stderr or result.stdout or "无错误输出").strip()
-                raise ReleaseVerificationError(
-                    f"包内 Python/Scapy 执行验证失败: {detail}"
-                )
-            try:
-                runtime = json.loads(result.stdout.strip())
-            except json.JSONDecodeError as exc:
-                raise ReleaseVerificationError(
-                    f"包内运行时返回无效 JSON: {result.stdout.strip()}"
-                ) from exc
-            if runtime.get("python") != expected_python:
-                raise ReleaseVerificationError(
-                    f"包内 Python 版本不是 {expected_python}: {runtime!r}"
-                )
-            if runtime.get("scapy") != expected_scapy:
-                raise ReleaseVerificationError(
-                    f"包内 Scapy 版本不是 {expected_scapy}: {runtime!r}"
-                )
-            expected_bits = 32 if architecture == "x86" else 64
-            if runtime.get("bits") != expected_bits:
-                raise ReleaseVerificationError(
-                    f"包内 Python 位数不是 {expected_bits}: {runtime!r}"
-                )
+        raise ReleaseVerificationError(
+            "轻量包不支持构建机执行 runtime；请在 Windows 首次启动时验证自动安装"
+        )
 
 
 def main() -> int:
