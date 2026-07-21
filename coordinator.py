@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import subprocess
@@ -21,6 +22,8 @@ from ipoe_simulator.profile import (
     ConfigError,
     DEFAULT_CONFIG,
     OPTION_CODES,
+    normalize_mac,
+    option_bytes,
 )
 from ipoe_simulator.platform_network import default_journal_path
 
@@ -267,6 +270,93 @@ def after_extract(config: Config) -> int | None:
         print("无效选择，请输入 0、1 或 2。")
 
 
+def clear_config(config: Config) -> bool:
+    print(
+        "将恢复完整默认 JSON 配置；不会删除 PCAP、日志、runtime 或恢复 journal。"
+    )
+    if input("输入 CLEAR 确认清空，其他输入取消: ").strip() != "CLEAR":
+        print("已取消清空配置。")
+        return False
+    config.data = json.loads(json.dumps(DEFAULT_CONFIG))
+    config.save()
+    print("配置已清空。")
+    return True
+
+
+def _manual_value(label: str, current: object, validator):
+    shown = current if current not in (None, "", []) else "(未设置)"
+    while True:
+        value = input(f"{label} [{shown}]（Enter 保留，- 清空）: ").strip()
+        if not value:
+            return current
+        if value == "-":
+            return [] if isinstance(current, list) else ""
+        try:
+            return validator(value)
+        except (ConfigError, ValueError) as exc:
+            print(f"输入无效: {exc}")
+
+
+def edit_config(config: Config) -> bool:
+    draft = json.loads(json.dumps(config.data))
+    device = draft["device"]
+    options = draft["dhcp_options"]
+    network = draft["network"]
+    capture = draft["capture"]
+
+    device["mac"] = _manual_value("MAC", device.get("mac", ""), normalize_mac)
+    for code in OPTION_CODES:
+        key = f"option{code}"
+
+        def validate_option(value: str, selected: int = code) -> str:
+            option_bytes(value, selected)
+            return value
+
+        options[key] = _manual_value(
+            f"Option {code}", options.get(key, ""), validate_option
+        )
+
+    def ipv4(value: str) -> str:
+        return str(ipaddress.IPv4Address(value))
+
+    def subnet_mask(value: str) -> str:
+        network_value = ipaddress.IPv4Network(f"0.0.0.0/{value}")
+        return str(network_value.netmask)
+
+    def dns_servers(value: str) -> list[str]:
+        items = [item.strip() for item in value.split(",") if item.strip()]
+        if not items:
+            raise ValueError("DNS 至少包含一个 IPv4 地址，清空请使用 -")
+        return [str(ipaddress.IPv4Address(item)) for item in items]
+
+    def duration(value: str) -> int:
+        seconds = int(value)
+        if not 1 <= seconds <= 3600:
+            raise ValueError("抓包时长必须在 1–3600 秒之间")
+        return seconds
+
+    network["subnet_mask"] = _manual_value(
+        "子网掩码", network.get("subnet_mask", ""), subnet_mask
+    )
+    network["gateway"] = _manual_value("网关", network.get("gateway", ""), ipv4)
+    network["dns"] = _manual_value(
+        "DNS（多个用逗号分隔）", network.get("dns", []), dns_servers
+    )
+    capture["duration"] = _manual_value(
+        "抓包时长秒数", capture.get("duration", 30), duration
+    )
+
+    print("\n待保存配置:")
+    print(json.dumps(draft, indent=2, ensure_ascii=False))
+    if input("输入 SAVE 保存，其他输入取消: ").strip() != "SAVE":
+        print("已取消手动填写，原配置未改变。")
+        return False
+    config.data = draft
+    config.save()
+    print("手动配置已保存。")
+    return True
+
+
 def interactive(config: Config) -> int:
     while True:
         print("\nIPoE DHCP 统筹管理器")
@@ -281,7 +371,7 @@ def interactive(config: Config) -> int:
         else:
             print(
                 "1. 抓包  2. 提取参数  3. 直接拨号  4. 完整流程  "
-                "5. 查看配置  6. 恢复网卡  0. 退出"
+                "5. 查看配置  6. 恢复网卡  7. 清空配置  8. 手动填写  0. 退出"
             )
         try:
             choice = input("选择: ").strip()
@@ -326,6 +416,10 @@ def interactive(config: Config) -> int:
                 print(json.dumps(config.data, indent=2, ensure_ascii=False))
             elif choice == "6":
                 do_restore()
+            elif choice == "7":
+                clear_config(config)
+            elif choice == "8":
+                edit_config(config)
             elif choice == "0":
                 return 0
             else:

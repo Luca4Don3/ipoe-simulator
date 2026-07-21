@@ -193,6 +193,48 @@ class CoordinatorInteractiveTests(unittest.TestCase):
             ):
                 self.assertEqual(coordinator.interactive(config), 0)
 
+    def test_clear_config_requires_clear_and_restores_full_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory)
+            config.set("aa:bb:cc:dd:ee:ff", "device", "mac")
+            with mock.patch("builtins.input", return_value="clear"):
+                self.assertFalse(coordinator.clear_config(config))
+            self.assertEqual(config.get("device", "mac"), "aa:bb:cc:dd:ee:ff")
+
+            with mock.patch("builtins.input", return_value="CLEAR"):
+                self.assertTrue(coordinator.clear_config(config))
+            self.assertEqual(config.data, coordinator.DEFAULT_CONFIG)
+            self.assertEqual(self.config(directory).data, coordinator.DEFAULT_CONFIG)
+
+    def test_manual_edit_cancellation_preserves_formal_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory)
+            config.save()
+            before = config.path.read_bytes()
+            responses = ["aa:bb:cc:dd:ee:ff", *("" for _ in range(10)), "CANCEL"]
+            with mock.patch("builtins.input", side_effect=responses):
+                self.assertFalse(coordinator.edit_config(config))
+            self.assertEqual(config.path.read_bytes(), before)
+
+    def test_manual_edit_saves_once_after_save_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory)
+            responses = ["aa:bb:cc:dd:ee:ff", *("" for _ in range(10)), "SAVE"]
+            with (
+                mock.patch("builtins.input", side_effect=responses),
+                mock.patch.object(config, "save", wraps=config.save) as save,
+            ):
+                self.assertTrue(coordinator.edit_config(config))
+            save.assert_called_once_with()
+            self.assertEqual(config.get("device", "mac"), "aa:bb:cc:dd:ee:ff")
+
+    def test_manual_value_retries_invalid_input(self) -> None:
+        with mock.patch("builtins.input", side_effect=["invalid", "192.0.2.1"]):
+            value = coordinator._manual_value(
+                "IPv4", "", lambda item: str(__import__("ipaddress").IPv4Address(item))
+            )
+        self.assertEqual(value, "192.0.2.1")
+
     def test_parent_waits_for_child_cleanup_after_ctrl_c(self) -> None:
         process = mock.Mock(pid=1234)
         process.wait.side_effect = [KeyboardInterrupt, 0]
