@@ -1,3 +1,23 @@
+# IPoE Simulator v0.4.2
+
+本修订版强化 Windows 恢复与交互安全：AutomaticMetric 自动模式不再同时写入 InterfaceMetric，手动模式恢复原指标；恢复最多等待 15 秒收敛，失败返回 `5` 并保留 journal。
+
+存在待恢复 journal 时，仅允许查看配置、列出接口、手动恢复和退出，成功恢复并删除 journal 后才解除门禁。交互选卡在 Windows 上优先显示状态为 Up 的非 Bluetooth、非虚拟接口；无安全候选时展示风险原因并要求输入 `USE`。交互抓包始终生成新 PCAP，提取成功前不污染正式配置。
+
+Windows 轻量运行时安装成功后删除本次已校验的下载文件；启动时按 owner/24 小时边界清理遗留 staging 和临时文件，不清理 runtime、PCAP、日志或失败 journal。本说明不表示 `v0.4.2` 已发布，仍需通过 Windows 实机验收。
+
+---
+
+# IPoE Simulator v0.4.1
+
+本版本修复 Windows 运行时启动问题。轻量发布包不再携带 Python；首次启动未找到匹配架构的 Python 3.9–3.14 时，启动器会按锁定清单下载并校验 Python 3.14.6 与 Scapy 2.7.0，再把运行时安装到包内 `runtime` 目录。
+
+PowerShell 运行时按 PowerShell 7、Windows PowerShell 5.1 的顺序逐个验证版本、UTF-8 输出和网络管理命令能力。PowerShell 7 启动失败、版本不兼容或缺少必要能力时会自动回退到能力完整的 Windows PowerShell 5.1；Windows PowerShell 5.1 以 `Function` 形式提供的网络命令也可通过探针。
+
+Windows 轻量附件提供 x86、x64、ARM64 三种架构。本说明不表示 `v0.4.1` 已发布；正式附件仍须经过 Windows CI 和目标设备验证。
+
+---
+
 # IPoE Simulator v0.4.0
 
 本版本将源码支持范围明确为 Python 3.9–3.14，越界版本会显式失败；依赖升级并锁定到 Scapy 2.7.0。Python 3.9 已 EOL，本项目仅承诺应用兼容性，不承诺解释器安全维护。

@@ -40,6 +40,53 @@ class InterfaceInfo:
         )
 
 
+@dataclass(frozen=True)
+class WindowsInterfaceState:
+    safe: bool
+    reason: str = ""
+
+
+def windows_interface_states() -> dict[int, WindowsInterfaceState]:
+    """查询 Windows 链路状态；公开 InterfaceInfo/CLI/schema 保持不变。"""
+    if sys.platform != "win32":
+        return {}
+    from .network_backend import NetworkStateError
+    from .powershell_runtime import get_powershell_runtime
+
+    script = """
+$ErrorActionPreference = 'Stop'
+@(Get-NetAdapter -IncludeHidden -ErrorAction Stop | ForEach-Object {
+    [pscustomobject]@{
+        index = [int]$_.InterfaceIndex
+        status = [string]$_.Status
+        name = [string]$_.Name
+        description = [string]$_.InterfaceDescription
+    }
+}) | ConvertTo-Json -Compress
+"""
+    try:
+        import json
+        raw = json.loads(get_powershell_runtime().run(script))
+    except Exception as exc:
+        if isinstance(exc, NetworkStateError):
+            raise InterfaceError(f"Windows 网卡状态查询失败: {exc}") from exc
+        raise InterfaceError(f"Windows 网卡状态查询失败: {exc}") from exc
+    rows = raw if isinstance(raw, list) else [raw]
+    result: dict[int, WindowsInterfaceState] = {}
+    virtual_tokens = ("virtual", "vmware", "hyper-v", "wintun", "tap", "loopback")
+    for row in rows:
+        combined = f"{row.get('name', '')} {row.get('description', '')}".lower()
+        reasons: list[str] = []
+        if str(row.get("status", "")).lower() != "up":
+            reasons.append(f"状态为 {row.get('status') or 'Unknown'}")
+        if "bluetooth" in combined or "蓝牙" in combined:
+            reasons.append("Bluetooth 接口")
+        if any(token in combined for token in virtual_tokens):
+            reasons.append("虚拟接口")
+        result[int(row["index"])] = WindowsInterfaceState(not reasons, "、".join(reasons))
+    return result
+
+
 def _load_scapy_conf() -> Any:
     try:
         from scapy.all import conf

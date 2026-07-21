@@ -7,8 +7,12 @@ import unittest
 from unittest.mock import patch
 
 from ipoe_simulator.network_backend import NetworkStateError
-from ipoe_simulator.powershell_runtime import get_powershell_runtime
-from ipoe_simulator.powershell_runtime import _candidate_paths
+from ipoe_simulator.powershell_runtime import (
+    PowerShellRuntime,
+    _candidate_paths,
+    _inspect_candidate,
+    get_powershell_runtime,
+)
 
 
 def _version_result(major: int, minor: int, patch_level: int, edition: str = "Core"):
@@ -32,74 +36,120 @@ class PowerShellRuntimeTests(unittest.TestCase):
         get_powershell_runtime.cache_clear()
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which")
-    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_prefers_powershell_7(self, run, which) -> None:
-        which.side_effect = lambda name: f"C:\\{name}" if name == "pwsh.exe" else None
-        run.return_value = _version_result(7, 4, 6)
+    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._candidate_paths")
+    def test_prefers_capable_powershell_7(self, candidates, inspect) -> None:
+        candidates.side_effect = lambda name: {
+            "pwsh.exe": [r"C:\pwsh.exe"],
+            "powershell.exe": [r"C:\powershell.exe"],
+        }[name]
+        inspect.return_value = PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core")
 
         runtime = get_powershell_runtime()
 
-        self.assertEqual(runtime.executable, "C:\\pwsh.exe")
-        self.assertEqual(runtime.version, "7.4.6")
-        self.assertEqual(runtime.edition, "Core")
-        self.assertFalse(runtime.is_windows_powershell_51)
-        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
-        self.assertEqual(run.call_args.kwargs["errors"], "replace")
+        self.assertEqual(runtime.executable, r"C:\pwsh.exe")
+        inspect.assert_called_once_with(r"C:\pwsh.exe", "pwsh.exe")
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which")
-    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_falls_back_to_windows_powershell_51(self, run, which) -> None:
-        which.side_effect = lambda name: f"C:\\{name}" if name == "powershell.exe" else None
-        run.return_value = _version_result(5, 1, 19041, "Desktop")
+    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._candidate_paths")
+    def test_falls_back_after_each_powershell_7_failure(self, candidates, inspect) -> None:
+        candidates.side_effect = lambda name: {
+            "pwsh.exe": [
+                r"C:\pwsh-start.exe",
+                r"C:\pwsh-version.exe",
+                r"C:\pwsh-utf8.exe",
+                r"C:\pwsh-network.exe",
+            ],
+            "powershell.exe": [r"C:\powershell.exe"],
+        }[name]
+        fallback = PowerShellRuntime(r"C:\powershell.exe", 5, 1, 19041, "Desktop")
+        inspect.side_effect = [
+            NetworkStateError("启动失败"),
+            NetworkStateError("版本信息无效"),
+            NetworkStateError("UTF-8 输出探针失败"),
+            NetworkStateError("网卡 cmdlet 探针返回无效结果"),
+            fallback,
+        ]
 
         runtime = get_powershell_runtime()
 
-        self.assertEqual(runtime.executable, "C:\\powershell.exe")
-        self.assertTrue(runtime.is_windows_powershell_51)
+        self.assertIs(runtime, fallback)
+        self.assertEqual(inspect.call_count, 5)
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value="C:\\powershell.exe")
-    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_rejects_power_shell_50(self, run, _which) -> None:
-        run.return_value = _version_result(5, 0, 10586, "Desktop")
+    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._candidate_paths")
+    def test_reports_all_candidate_failures(self, candidates, inspect) -> None:
+        candidates.side_effect = lambda name: {
+            "pwsh.exe": [r"C:\pwsh.exe"],
+            "powershell.exe": [r"C:\powershell.exe"],
+        }[name]
+        inspect.side_effect = [
+            NetworkStateError("PowerShell 7 网络能力缺失"),
+            NetworkStateError("最低支持 PowerShell 5.1"),
+        ]
 
-        with self.assertRaisesRegex(NetworkStateError, "最低支持 PowerShell 5.1"):
+        with self.assertRaises(NetworkStateError) as raised:
             get_powershell_runtime()
 
+        message = str(raised.exception)
+        self.assertIn(r"C:\pwsh.exe: PowerShell 7 网络能力缺失", message)
+        self.assertIn(r"C:\powershell.exe: 最低支持 PowerShell 5.1", message)
+
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value=None)
-    def test_reports_missing_runtime(self, _which) -> None:
+    @patch("ipoe_simulator.powershell_runtime._candidate_paths", return_value=[])
+    def test_reports_missing_runtime(self, _candidates) -> None:
         with self.assertRaisesRegex(NetworkStateError, "未找到受支持的 PowerShell"):
             get_powershell_runtime()
 
-    @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which")
+    @patch.object(PowerShellRuntime, "probe_network_cmdlets")
+    @patch.object(PowerShellRuntime, "probe_utf8_output")
     @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_does_not_fall_back_when_preferred_runtime_fails(self, run, which) -> None:
-        which.side_effect = lambda name: f"C:\\{name}"
-        run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr="pwsh failed"
-        )
+    def test_rejects_power_shell_50(self, run, utf8_probe, network_probe) -> None:
+        run.return_value = _version_result(5, 0, 10586, "Desktop")
 
-        with self.assertRaisesRegex(NetworkStateError, "pwsh.exe 返回 1"):
-            get_powershell_runtime()
+        with self.assertRaisesRegex(NetworkStateError, "最低支持 PowerShell 5.1"):
+            _inspect_candidate(r"C:\powershell.exe", "powershell.exe")
 
-        self.assertEqual(run.call_count, 1)
+        utf8_probe.assert_not_called()
+        network_probe.assert_not_called()
 
-    @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value="C:\\pwsh.exe")
+    @patch.object(PowerShellRuntime, "probe_network_cmdlets")
+    @patch.object(PowerShellRuntime, "probe_utf8_output")
     @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_runtime_invocation_prepends_utf8_setup(self, run, _which) -> None:
-        run.return_value = _version_result(7, 4, 6)
-        runtime = get_powershell_runtime()
-        run.reset_mock()
+    def test_candidate_checks_version_utf8_and_network(
+        self, run, utf8_probe, network_probe
+    ) -> None:
+        run.return_value = _version_result(5, 1, 19041, "Desktop")
+
+        runtime = _inspect_candidate(r"C:\powershell.exe", "powershell.exe")
+
+        self.assertTrue(runtime.is_windows_powershell_51)
+        utf8_probe.assert_called_once_with()
+        network_probe.assert_called_once_with()
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+        self.assertEqual(run.call_args.kwargs["errors"], "replace")
+
+    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
+    def test_network_probe_accepts_cmdlet_and_function(self, run) -> None:
         run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="ok", stderr=""
         )
 
-        runtime.run("Write-Output 'ok'")
+        PowerShellRuntime(r"C:\powershell.exe", 5, 1, 19041, "Desktop").probe_network_cmdlets()
+
+        encoded = run.call_args.args[0][-1]
+        script = base64.b64decode(encoded).decode("utf-16-le")
+        self.assertIn("-CommandType Cmdlet,Function", script)
+
+    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
+    def test_runtime_invocation_prepends_utf8_setup(self, run) -> None:
+        run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok", stderr=""
+        )
+
+        PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core").run("Write-Output 'ok'")
 
         encoded = run.call_args.args[0][-1]
         script = base64.b64decode(encoded).decode("utf-16-le")

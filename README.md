@@ -16,7 +16,7 @@
 - `ipoe-simulator-v0.2.1-windows-x64.zip`
 - `ipoe-simulator-v0.2.1-windows-arm64.zip`
 
-三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 ZIP 只有一个顶层目录，自带匹配架构的 Python 3.14.6 和 Scapy 2.7.0；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
+三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。已发布的 `v0.2.1` ZIP 每个只有一个顶层目录，自带匹配架构的 Python 3.11.9 和 Scapy 2.6.1；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
 
 ## 配置示例
 
@@ -109,9 +109,9 @@ Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧�
 
 源码正式支持 Python 3.9、3.10、3.11、3.12、3.13 和 3.14，并锁定 Scapy 2.7.0。Python 3.8 及更低版本、Python 3.15 及更高版本会显式失败。`release-dependencies.json` 记录 Windows 便携 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256；打包与运行时安装均只接受该清单，已安装的 Scapy 版本不匹配也会失败。
 
-Python 3.9 已结束上游安全维护；项目只承诺应用代码兼容，不承诺 Python 3.9 解释器的安全维护。源码支持矩阵与 Windows 包内固定运行时相互独立：Windows Release 仍只提供 Python 3.14.6 的 x86、x64、ARM64 三个附件，不为每个源码支持版本分别打包。
+Python 3.9 已结束上游安全维护；项目只承诺应用代码兼容，不承诺 Python 3.9 解释器的安全维护。源码支持矩阵与 Windows 自动安装的固定运行时相互独立：Windows Release 仍提供 x86、x64、ARM64 三个附件，首次启动未找到匹配的 Python 时下载并校验 Python 3.14.6 与 Scapy 2.7.0。
 
-- Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装时回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
+- Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装、启动失败、版本不兼容、UTF-8 输出或所需网络管理命令能力不完整时，自动尝试其他 PowerShell 7 候选并回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
 - macOS/Linux 要求 `sudo/root`，程序不会自动提权。
 - macOS 26 不应被视为自带 Python。运行源码前须通过 Command Line Tools 或 Python 官方/可信发行版安装 Python 3.9–3.14；若 `python3` 只是不可用的系统 shim 或解释器缺失，启动器会提示安装，不会静默继续。
 - macOS 使用系统网络工具与系统 `libpcap/BPF`。
@@ -232,7 +232,9 @@ python3 coordinator.py --restore
 python3 coordinator.py --config ipoedhcp_config.json --log-level INFO
 ```
 
-`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入包含手动恢复项的交互菜单。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
+`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入交互菜单。交互模式会显示当前接口；抓包、直接拨号和完整流程每次都会重新列出网卡。Windows 主列表只显示状态为 `Up` 的非 Bluetooth、非虚拟接口；没有安全候选时会显示风险接口及原因，必须输入区分大小写的 `USE` 才能采用。取消、状态查询失败或接口失效不会写入配置或创建 journal。
+
+交互抓包始终创建新的 `.temp/dhcp-*.pcap`，不会覆盖之前导入或提取的文件。抓包完成后先恢复正式配置，只有参数提取成功才原子合并有效 DHCP 信息和新 PCAP 引用；提取失败时保留新 PCAP 供诊断，原 MAC、接口、Options、网络参数和有效 PCAP 引用不变。主菜单空输入刷新，`Ctrl+C` 正常退出且不输出 traceback。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
 
 ### Windows 启动器
 
@@ -255,6 +257,12 @@ run.cmd --restore
 3. 父进程异常退出时，由 watchdog 读取恢复日志并执行恢复；
 4. 断电重启或需要人工重试时，先运行 `python3 ipoedhcp.py --restore`、`run.cmd --restore` 或 `sudo ./run.sh --restore`；
 5. 恢复成功后删除日志，恢复失败时保留日志并记录错误，后续启动继续重试。
+
+只要默认 journal 存在，程序就启用安全门禁：交互模式仅允许查看配置、恢复网卡和退出；非交互抓包、提取、拨号、完整流程和重置在写配置或改网卡前返回 `5`，只读接口列表保持可用。恢复成功但 journal 未实际删除时不会解除门禁，也不会自动继续原操作。
+
+Windows 恢复 AutomaticMetric 时，原状态为 `Enabled` 只恢复自动指标；原状态为 `Disabled` 才同时恢复 InterfaceMetric。写入后每 500 ms 校验一次，最长 15 秒，未收敛显式失败并保留 journal。
+
+Windows 启动器在 runtime 安装成功后删除本次校验过的 Python ZIP 和 Scapy wheel。启动时清理 owner 已失效的 `runtime-install-*`；无 owner 的旧目录和已知 `*.tmp` 仅在超过 24 小时后清理。runtime、PCAP、日志和失败 journal 属于运行或诊断资产，不在该清理范围内。
 
 恢复状态目录：
 

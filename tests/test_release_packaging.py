@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import struct
 import tempfile
 import unittest
 import zipfile
@@ -12,16 +11,6 @@ from scripts.verify_windows_release import (
     ReleaseVerificationError,
     verify_archive,
 )
-
-
-def fake_pe(machine: int) -> bytes:
-    content = bytearray(256)
-    content[:2] = b"MZ"
-    struct.pack_into("<I", content, 0x3C, 128)
-    content[128:132] = b"PE\0\0"
-    struct.pack_into("<H", content, 132, machine)
-    return bytes(content)
-
 
 class ReleasePackagingTests(unittest.TestCase):
     def test_release_dependency_versions_and_wheel_are_locked(self) -> None:
@@ -52,13 +41,10 @@ class ReleasePackagingTests(unittest.TestCase):
         version = "0.1.0"
         root = f"ipoe-simulator-v{version}-windows-{architecture}"
         archive = directory / f"{root}.zip"
-        machines = {"x86": 0x014C, "x64": 0x8664, "arm64": 0xAA64}
         with zipfile.ZipFile(archive, "w") as package:
             for relative in REQUIRED_FILES:
                 content = b"placeholder"
-                if relative == "runtime/python.exe":
-                    content = fake_pe(machines[architecture])
-                elif relative == "VERSION":
+                if relative == "VERSION":
                     content = version.encode()
                 package.writestr(f"{root}/{relative}", content)
             if extra_file:
@@ -84,6 +70,15 @@ class ReleasePackagingTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "a") as package:
                 package.writestr("unexpected/file.txt", b"bad")
             with self.assertRaisesRegex(ReleaseVerificationError, "顶层目录"):
+                verify_archive(archive, "x64", "0.1.0")
+
+    def test_rejects_bundled_python_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = self.make_archive(
+                Path(directory),
+                extra_file="runtime/python.exe",
+            )
+            with self.assertRaisesRegex(ReleaseVerificationError, "不应携带"):
                 verify_archive(archive, "x64", "0.1.0")
 
 

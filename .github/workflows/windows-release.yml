@@ -57,6 +57,26 @@ jobs:
             throw 'run.cmd 不存在'
           }
           Write-Output 'Windows PowerShell 5.1 launcher syntax OK'
+      - name: Probe Windows PowerShell 5.1 network command types
+        shell: powershell
+        run: |
+          $required = @(
+            'Get-NetAdapter',
+            'Get-NetIPInterface',
+            'Get-NetIPAddress',
+            'Get-NetRoute',
+            'Get-DnsClientServerAddress',
+            'New-NetIPAddress',
+            'Set-NetIPInterface',
+            'Set-DnsClientServerAddress'
+          )
+          foreach ($name in $required) {
+            $command = Get-Command -Name $name -CommandType Cmdlet,Function -ErrorAction Stop
+            if ($command.CommandType -notin @('Cmdlet', 'Function')) {
+              throw "$name 命令类型不受支持: $($command.CommandType)"
+            }
+            Write-Output "$name`: $($command.CommandType)"
+          }
 
   metadata:
     runs-on: ubuntu-latest
@@ -80,7 +100,9 @@ jobs:
           fi
 
   build:
-    needs: test
+    needs:
+      - test
+      - powershell-51-compatibility
     runs-on: windows-2022
     strategy:
       fail-fast: false
