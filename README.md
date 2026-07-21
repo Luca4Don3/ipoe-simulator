@@ -236,6 +236,8 @@ python3 coordinator.py --config ipoedhcp_config.json --log-level INFO
 
 交互抓包始终创建新的 `.temp/dhcp-*.pcap`，不会覆盖之前导入或提取的文件。抓包完成后先恢复正式配置，只有参数提取成功才原子合并有效 DHCP 信息和新 PCAP 引用；提取失败时保留新 PCAP 供诊断，原 MAC、接口、Options、网络参数和有效 PCAP 引用不变。主菜单空输入刷新，`Ctrl+C` 正常退出且不输出 traceback。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
 
+交互菜单的“清空配置”要求输入区分大小写的 `CLEAR`，只恢复完整默认 JSON，不删除运行资产或 journal。“手动填写”覆盖 MAC、Option 12/43/50/60/61/125、点分十进制子网掩码、网关、DNS 和抓包时长：Enter 保留，`-` 清空，无效输入继续当前字段；所有编辑先进入内存草稿，仅输入 `SAVE` 才一次性原子保存，取消或中断不修改正式配置。存在待恢复 journal 时，这两个写操作同样受安全门禁阻断。
+
 ### Windows 启动器
 
 Windows 可运行：
