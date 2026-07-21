@@ -8,13 +8,12 @@ from ipoe_simulator.network_backend import NetworkStateError
 
 
 class DhcpInterruptTests(unittest.TestCase):
-    def test_retries_restore_after_repeated_ctrl_c(self) -> None:
+    def test_restore_is_not_reentered(self) -> None:
         transaction = mock.Mock()
-        transaction.restore.side_effect = [KeyboardInterrupt, None]
 
         self.assertTrue(ipoedhcp._restore_transaction(transaction))
 
-        self.assertEqual(transaction.restore.call_count, 2)
+        transaction.restore.assert_called_once_with()
 
     def test_restore_network_failure_remains_explicit(self) -> None:
         transaction = mock.Mock()

@@ -25,6 +25,9 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertLess(content.index("where pwsh.exe"), content.index("where powershell.exe"))
         self.assertIn('set "exit_code=%errorlevel%"', content)
         self.assertIn("exit /b %exit_code%", content)
+        self.assertIn('"%~dp0runtime\\python.exe" -u "%~dp0ipoedhcp.py" %*', content)
+        self.assertIn("net session >nul 2>&1", content)
+        self.assertIn("唯一正确命令: .\\run.cmd --restore", content)
 
     def test_batch_launcher_logs_before_runtime_discovery(self) -> None:
         content = RUN_CMD.read_text(encoding="utf-8")
@@ -61,6 +64,16 @@ class WindowsLauncherTests(unittest.TestCase):
         for fragment in required_fragments:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, content)
+
+    def test_restore_routes_directly_and_has_strict_arguments(self) -> None:
+        content = LAUNCHER.read_text(encoding="utf-8")
+        self.assertIn("Join-Path $RootDirectory 'ipoedhcp.py'", content)
+        self.assertIn("唯一正确命令: .\\run.cmd --restore", content)
+        self.assertIn("--restore 仅允许附加 --log-level INFO|DEBUG", content)
+        self.assertIn("存在待恢复 journal，优先安装锁定运行时", content)
+        self.assertIn("if ($restoreMode)", content)
+        restore_tail = content[content.index("if ($restoreMode)", content.index("$businessScript")):]
+        self.assertLess(restore_tail.index("exit $exitCode"), restore_tail.index("Read-Host"))
 
     def test_committed_line_endings_follow_platform_rules(self) -> None:
         attributes = subprocess.run(

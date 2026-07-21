@@ -131,29 +131,40 @@ class PowerShellRuntimeTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
         self.assertEqual(run.call_args.kwargs["errors"], "replace")
 
-    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_network_probe_accepts_cmdlet_and_function(self, run) -> None:
-        run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="ok", stderr=""
-        )
+    @patch("ipoe_simulator.powershell_runtime.subprocess.Popen")
+    def test_network_probe_accepts_cmdlet_and_function(self, popen) -> None:
+        process = popen.return_value
+        process.communicate.return_value = ("ok", "")
+        process.returncode = 0
 
         PowerShellRuntime(r"C:\powershell.exe", 5, 1, 19041, "Desktop").probe_network_cmdlets()
 
-        encoded = run.call_args.args[0][-1]
+        encoded = popen.call_args.args[0][-1]
         script = base64.b64decode(encoded).decode("utf-16-le")
         self.assertIn("-CommandType Cmdlet,Function", script)
 
-    @patch("ipoe_simulator.powershell_runtime.subprocess.run")
-    def test_runtime_invocation_prepends_utf8_setup(self, run) -> None:
-        run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="ok", stderr=""
-        )
+    @patch("ipoe_simulator.powershell_runtime.subprocess.Popen")
+    def test_runtime_invocation_prepends_utf8_setup(self, popen) -> None:
+        process = popen.return_value
+        process.communicate.return_value = ("ok", "")
+        process.returncode = 0
 
         PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core").run("Write-Output 'ok'")
 
-        encoded = run.call_args.args[0][-1]
+        encoded = popen.call_args.args[0][-1]
         script = base64.b64decode(encoded).decode("utf-16-le")
         self.assertIn("UTF8Encoding", script)
+
+    @patch("ipoe_simulator.powershell_runtime._terminate_process")
+    @patch("ipoe_simulator.powershell_runtime.subprocess.Popen")
+    def test_runtime_timeout_reaps_process(self, popen, terminate) -> None:
+        process = popen.return_value
+        process.communicate.side_effect = subprocess.TimeoutExpired("pwsh", 3)
+
+        with self.assertRaisesRegex(NetworkStateError, "PowerShell 执行超时"):
+            PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core").run("hang", timeout=3)
+
+        terminate.assert_called_once_with(process)
 
     @patch("ipoe_simulator.powershell_runtime.os.path.isfile", return_value=True)
     @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value=None)
