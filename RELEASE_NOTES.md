@@ -4,7 +4,9 @@
 
 PowerShell 恢复进程使用受控子进程，超时或异常会终止并等待回收。恢复期间重复 `Ctrl+C` 只记录警告，不会重入恢复。schema v2 journal 追加总恢复次数和最近 20 次的阶段、步骤、时间及错误诊断；仅校验通过后删除 journal。
 
-Windows `run.cmd --restore` 现在直接进入 `ipoedhcp.py --restore`，仅允许附加 `--log-level INFO|DEBUG`，透传退出码且不显示结束暂停。存在 journal 但包内 runtime 缺失时，启动器先安装锁定 runtime，再立即恢复。本说明仅代表离线实现与验证目标；Windows 实机通过前不得宣称恢复问题已完成。
+Windows `run.cmd --restore` 现在直接进入 `ipoedhcp.py --restore`，仅允许附加 `--log-level INFO|DEBUG`，透传退出码且不显示结束暂停。存在 journal 但包内 runtime 缺失时，启动器先安装锁定 runtime，再立即恢复。Windows 11 x64 已完成 DHCP 失败后的自动恢复、待恢复门禁和独立手动恢复实测，本版本确认可用；其他 Windows 版本与架构仍以各自发布门禁结果为准。
+
+交互菜单移除“完整流程”，命令行同步移除 `--all`。抓包、参数提取和直接拨号继续作为独立操作提供，避免自动串联抓包、提取和拨号产生不明确的失败语义。
 
 ---
 

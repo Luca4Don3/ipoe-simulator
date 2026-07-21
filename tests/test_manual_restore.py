@@ -118,7 +118,6 @@ class CoordinatorRestoreTests(unittest.TestCase):
             "--capture",
             "--extract",
             "--dhcp",
-            "--all",
             "--show",
             "--reset",
             "--interactive",

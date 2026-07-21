@@ -216,12 +216,6 @@ python3 coordinator.py --extract .temp/stb.pcap
 python3 coordinator.py --dhcp
 ```
 
-执行完整流程：
-
-```text
-python3 coordinator.py --all --interface 12 --duration 30
-```
-
 常用管理参数：
 
 ```text
@@ -232,7 +226,7 @@ python3 coordinator.py --restore
 python3 coordinator.py --config ipoedhcp_config.json --log-level INFO
 ```
 
-`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入交互菜单。交互模式会显示当前接口；抓包、直接拨号和完整流程每次都会重新列出网卡。Windows 主列表只显示状态为 `Up` 的非 Bluetooth、非虚拟接口；没有安全候选时会显示风险接口及原因，必须输入区分大小写的 `USE` 才能采用。取消、状态查询失败或接口失效不会写入配置或创建 journal。
+`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入交互菜单。交互模式会显示当前接口；抓包和直接拨号每次都会重新列出网卡。Windows 主列表只显示状态为 `Up` 的非 Bluetooth、非虚拟接口；没有安全候选时会显示风险接口及原因，必须输入区分大小写的 `USE` 才能采用。取消、状态查询失败或接口失效不会写入配置或创建 journal。
 
 交互抓包始终创建新的 `.temp/dhcp-*.pcap`，不会覆盖之前导入或提取的文件。抓包完成后先恢复正式配置，只有参数提取成功才原子合并有效 DHCP 信息和新 PCAP 引用；提取失败时保留新 PCAP 供诊断，原 MAC、接口、Options、网络参数和有效 PCAP 引用不变。主菜单空输入刷新，`Ctrl+C` 正常退出且不输出 traceback。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
 
@@ -260,7 +254,7 @@ run.cmd --restore
 4. 断电重启或需要人工重试时，先运行 `python3 ipoedhcp.py --restore`、`run.cmd --restore` 或 `sudo ./run.sh --restore`；
 5. 恢复成功后删除日志，恢复失败时保留日志并记录错误，后续启动继续重试。
 
-只要默认 journal 存在，程序就启用安全门禁：交互模式仅允许查看配置、恢复网卡和退出；非交互抓包、提取、拨号、完整流程和重置在写配置或改网卡前返回 `5`，只读接口列表保持可用。恢复成功但 journal 未实际删除时不会解除门禁，也不会自动继续原操作。
+只要默认 journal 存在，程序就启用安全门禁：交互模式仅允许查看配置、恢复网卡和退出；非交互抓包、提取、拨号和重置在写配置或改网卡前返回 `5`，只读接口列表保持可用。恢复成功但 journal 未实际删除时不会解除门禁，也不会自动继续原操作。
 
 Windows 恢复 AutomaticMetric 时，原状态为 `Enabled` 只恢复自动指标；原状态为 `Disabled` 才同时恢复 InterfaceMetric。恢复不会执行 `ipconfig /renew`，配置写入、每 500 ms 一次的状态收敛检查和最终校验共享 30 秒总预算。原状态为 DHCP 时，校验只要求 DHCP 模式、DNS、指标和程序手动地址清理正确，允许 Windows 稍后异步取得 DHCP 地址。
 

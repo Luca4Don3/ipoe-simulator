@@ -158,6 +158,21 @@ class CoordinatorInteractiveTests(unittest.TestCase):
             select.assert_called_once_with(config)
             dhcp.assert_called_once_with(config)
 
+    def test_removed_full_flow_menu_choice_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(directory)
+            with (
+                mock.patch("builtins.input", side_effect=["4", "0"]),
+                mock.patch.object(coordinator, "do_capture") as capture,
+                mock.patch.object(coordinator, "do_extract") as extract,
+                mock.patch.object(coordinator, "do_dhcp") as dhcp,
+            ):
+                self.assertEqual(coordinator.interactive(config), 0)
+
+            capture.assert_not_called()
+            extract.assert_not_called()
+            dhcp.assert_not_called()
+
     def test_ctrl_c_at_menu_exits_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.config(directory)
