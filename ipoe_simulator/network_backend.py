@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 from .interfaces import InterfaceInfo
 
@@ -102,3 +102,21 @@ class NetworkBackend(ABC):
         app_ip: str | None,
     ) -> list[str]:
         raise NotImplementedError
+
+    def restore_and_verify(
+        self,
+        interface: InterfaceInfo,
+        snapshot: dict[str, Any],
+        app_ip: str | None,
+        progress: Callable[[str, str], None],
+    ) -> list[str]:
+        """恢复并校验；平台可覆盖以提供共享总预算的有界恢复。"""
+
+        progress("configuration", "配置写入开始")
+        self.restore(interface, snapshot)
+        progress("convergence", "配置写入完成")
+        current = self.capture_snapshot(interface)
+        errors = self.verify_restored(snapshot, current, app_ip)
+        if not errors:
+            progress("verification", "校验通过")
+        return errors
