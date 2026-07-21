@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import shutil
+import signal
 import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,7 +35,7 @@ class PowerShellRuntime:
     def is_windows_powershell_51(self) -> bool:
         return self.major == 5 and self.minor == 1
 
-    def run(self, script: str, *, timeout: int = 45) -> str:
+    def run(self, script: str, *, timeout: float = 45) -> str:
         script = _UTF8_SETUP + script
         LOGGER.debug(
             "执行 PowerShell script_length=%s timeout_seconds=%s executable=%s",
@@ -43,9 +44,7 @@ class PowerShellRuntime:
             self.executable,
         )
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-        try:
-            result = subprocess.run(
-                [
+        command = [
                     self.executable,
                     "-NoLogo",
                     "-NoProfile",
@@ -54,20 +53,36 @@ class PowerShellRuntime:
                     "Bypass",
                     "-EncodedCommand",
                     encoded,
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-                check=False,
-            )
+                ]
+        kwargs: dict[str, Any] = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        process: subprocess.Popen[str] | None = None
+        try:
+            process = subprocess.Popen(command, **kwargs)
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            assert process is not None
+            _terminate_process(process)
+            raise NetworkStateError(f"PowerShell 执行超时（{timeout} 秒）") from exc
         except (OSError, subprocess.SubprocessError) as exc:
+            if process is not None:
+                _terminate_process(process)
             raise NetworkStateError(f"PowerShell 执行失败: {exc}") from exc
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "未知 PowerShell 错误").strip()
-            raise NetworkStateError(f"PowerShell 返回 {result.returncode}: {detail}")
-        return result.stdout.strip()
+        except BaseException:
+            if process is not None:
+                _terminate_process(process)
+            raise
+        if process.returncode != 0:
+            detail = (stderr or stdout or "未知 PowerShell 错误").strip()
+            raise NetworkStateError(f"PowerShell 返回 {process.returncode}: {detail}")
+        return stdout.strip()
 
     def run_json(self, script: str, *, timeout: int = 45) -> Any:
         output = self.run(script, timeout=timeout)
@@ -112,6 +127,26 @@ _UTF8_SETUP = (
     "$utf8 = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false; "
     "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
 )
+
+
+def _terminate_process(process: subprocess.Popen[str]) -> None:
+    """终止并回收 PowerShell，避免超时或中断留下恢复子进程。"""
+
+    if process.poll() is not None:
+        process.wait()
+        return
+    try:
+        if os.name == "nt":
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            process.terminate()
+        process.wait(timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
 
 _VERSION_SCRIPT = (
     _UTF8_SETUP

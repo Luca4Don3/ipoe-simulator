@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import Any, Callable
 
 from .interfaces import InterfaceInfo
 from .network_backend import NetworkBackend, NetworkStateError
@@ -144,7 +144,6 @@ New-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -IPAddress {_ps_string
 
 def _restore_script(snapshot: dict[str, Any]) -> str:
     idx = int(snapshot["interface_index"])
-    interface_name = _ps_string(str(snapshot.get("interface_name", "")))
     interface_guid = str(snapshot.get("interface_guid", ""))
     dhcp_enabled = str(snapshot.get("dhcp", "")).lower() == "enabled"
     automatic_metric = str(snapshot.get("automatic_metric", "")).lower() == "enabled"
@@ -171,7 +170,6 @@ def _restore_script(snapshot: dict[str, Any]) -> str:
             [
                 "Set-DnsClientServerAddress -InterfaceIndex $idx -ResetServerAddresses -ErrorAction Stop",
                 "Set-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop",
-                f"ipconfig.exe /renew {interface_name} | Out-Null",
             ]
         )
     else:
@@ -237,7 +235,12 @@ def verify_restored(original: dict[str, Any], current: dict[str, Any], app_ip: s
         errors.append(f"DHCP 状态不一致: 期望 {original_dhcp}, 实际 {current_dhcp}")
     current_ips = {ip for ip, _ in _address_set(current)}
     original_ips = {ip for ip, _ in _address_set(original)}
-    if original_dhcp != "enabled" and app_ip and app_ip in current_ips and app_ip not in original_ips:
+    manual_current_ips = {
+        str(item.get("ip_address"))
+        for item in current.get("addresses", [])
+        if str(item.get("prefix_origin", "")).lower() == "manual"
+    }
+    if app_ip and app_ip in manual_current_ips and app_ip not in original_ips:
         errors.append(f"程序配置的地址仍然存在: {app_ip}")
     if original_dhcp != "enabled" and _address_set(original) != _address_set(current):
         errors.append("静态 IPv4 地址未完整恢复")
@@ -314,20 +317,62 @@ class WindowsNetworkBackend(NetworkBackend):
         interface: InterfaceInfo,
         snapshot: dict[str, Any],
     ) -> None:
-        _run_powershell(_restore_script(snapshot), timeout=90)
+        _run_powershell(_restore_script(snapshot), timeout=30)
 
-        deadline = time.monotonic() + 15.0
+    def restore_and_verify(
+        self,
+        interface: InterfaceInfo,
+        snapshot: dict[str, Any],
+        app_ip: str | None,
+        progress: Callable[[str, str], None],
+    ) -> list[str]:
+        deadline = time.monotonic() + 30.0
+        progress("configuration", "配置写入开始")
+        self._run_with_budget(_restore_script(snapshot), deadline)
+        progress("convergence", "配置写入完成")
         last_errors: list[str] = []
         while True:
-            current = capture_snapshot(interface.index)
-            last_errors = verify_restored(snapshot, current, None)
+            current = self._capture_with_budget(interface.index, deadline)
+            last_errors = verify_restored(snapshot, current, app_ip)
             if not last_errors:
-                return
+                progress("verification", "校验通过")
+                return []
             if time.monotonic() >= deadline:
                 raise NetworkStateError(
-                    "Windows 网卡恢复在 15 秒内未收敛: " + "; ".join(last_errors)
+                    "Windows 网卡恢复在 30 秒内未收敛: " + "; ".join(last_errors)
                 )
-            time.sleep(0.5)
+            progress("convergence", "; ".join(last_errors))
+            time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
+
+    @staticmethod
+    def _remaining(deadline: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise NetworkStateError("Windows 网卡恢复超过 30 秒总预算")
+        return remaining
+
+    @classmethod
+    def _run_with_budget(cls, script: str, deadline: float) -> Any:
+        return _run_powershell(script, timeout=cls._remaining(deadline))
+
+    @classmethod
+    def _capture_with_budget(cls, interface_index: int, deadline: float) -> dict[str, Any]:
+        data = _run_powershell(
+            _snapshot_script(interface_index),
+            timeout=cls._remaining(deadline),
+            expect_json=True,
+        )
+        if not isinstance(data, dict) or int(data.get("interface_index", -1)) != interface_index:
+            raise NetworkStateError("网卡快照内容无效")
+        data["addresses"] = data.get("addresses") or []
+        data["routes"] = data.get("routes") or []
+        data["dns_servers"] = data.get("dns_servers") or []
+        for key in ("addresses", "routes"):
+            if isinstance(data[key], dict):
+                data[key] = [data[key]]
+        if isinstance(data["dns_servers"], str):
+            data["dns_servers"] = [data["dns_servers"]]
+        return data
 
     def verify_restored(
         self,

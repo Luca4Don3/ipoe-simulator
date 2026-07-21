@@ -206,6 +206,32 @@ class TransactionTests(unittest.TestCase):
             saved = json.loads(journal.read_text(encoding="utf-8"))
             self.assertEqual(saved["status"], "restore_failed")
             self.assertIn("injected restore failure", saved["restore_errors"][0])
+            self.assertEqual(saved["total_restore_attempts"], 1)
+            attempt = saved["restore_attempts"][-1]
+            self.assertEqual(attempt["phase"], "configuration")
+            self.assertIsNotNone(attempt["ended_at"])
+            self.assertIn("injected restore failure", attempt["error"])
+
+    def test_restore_interrupt_is_recorded_without_traceback(self) -> None:
+        backend = FakeBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "network-recovery.json"
+            transaction = NetworkTransaction.begin(
+                INTERFACE,
+                journal,
+                backend=backend,
+                start_watchdog=False,
+            )
+            backend.restore = lambda interface, snapshot: (_ for _ in ()).throw(
+                KeyboardInterrupt()
+            )
+
+            with self.assertRaisesRegex(NetworkStateError, "恢复执行失败"):
+                transaction.restore()
+
+            saved = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(saved["status"], "restore_failed")
+            self.assertEqual(saved["total_restore_attempts"], 1)
 
     def test_verification_failure_preserves_journal(self) -> None:
         backend = FakeBackend(verify_errors=["injected verify failure"])

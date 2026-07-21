@@ -1,3 +1,13 @@
+# IPoE Simulator v0.5.1
+
+本修订版修复 Windows 恢复被 DHCP 续租阻塞的问题。恢复不再显式执行 `ipconfig /renew`；地址和路由清理、DNS、DHCP 模式、AutomaticMetric 与 InterfaceMetric 的配置写入、状态收敛和校验共享 30 秒总预算。原状态为 DHCP 时允许 Windows 暂时尚未取得新地址，但程序写入的手动地址不得残留。
+
+PowerShell 恢复进程使用受控子进程，超时或异常会终止并等待回收。恢复期间重复 `Ctrl+C` 只记录警告，不会重入恢复。schema v2 journal 追加总恢复次数和最近 20 次的阶段、步骤、时间及错误诊断；仅校验通过后删除 journal。
+
+Windows `run.cmd --restore` 现在直接进入 `ipoedhcp.py --restore`，仅允许附加 `--log-level INFO|DEBUG`，透传退出码且不显示结束暂停。存在 journal 但包内 runtime 缺失时，启动器先安装锁定 runtime，再立即恢复。本说明仅代表离线实现与验证目标；Windows 实机通过前不得宣称恢复问题已完成。
+
+---
+
 # IPoE Simulator v0.5.0
 
 本次 MINOR 更新新增交互式配置管理。“清空配置”必须输入区分大小写的 `CLEAR`，只把 JSON 恢复为完整 `DEFAULT_CONFIG`，不删除 PCAP、日志、runtime 或恢复 journal。
