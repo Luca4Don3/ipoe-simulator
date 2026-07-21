@@ -9,12 +9,26 @@ import sys
 from pathlib import Path
 
 from ipoe_simulator.app_logging import LOG_LEVELS, configure_logging, get_logger
-from ipoe_simulator.profile import Config, ConfigError, DEFAULT_CONFIG, OPTION_CODES
+from ipoe_simulator.interfaces import (
+    InterfaceError,
+    InterfaceInfo,
+    list_interfaces,
+    resolve_interface,
+    windows_interface_states,
+)
+from ipoe_simulator.profile import (
+    Config,
+    ConfigError,
+    DEFAULT_CONFIG,
+    OPTION_CODES,
+)
+from ipoe_simulator.platform_network import default_journal_path
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = ROOT / "ipoedhcp_config.json"
 LOGGER = get_logger("coordinator")
+JOURNAL = default_journal_path(ROOT)
 
 
 class CoordinatorError(RuntimeError):
@@ -34,12 +48,22 @@ def run_script(
     if not path.exists():
         raise CoordinatorError(f"脚本不存在: {path}")
     LOGGER.info("子流程开始 script=%s description=%s", script, description)
-    result = subprocess.run([sys.executable, "-u", str(path), *args], cwd=ROOT, check=False)
-    if result.returncode != 0:
-        LOGGER.error("子流程失败 script=%s returncode=%s", script, result.returncode)
+    process = subprocess.Popen([sys.executable, "-u", str(path), *args], cwd=ROOT)
+    while True:
+        try:
+            return_code = process.wait()
+            break
+        except KeyboardInterrupt:
+            LOGGER.info(
+                "子流程收到停止请求，等待其完成清理 script=%s pid=%s",
+                script,
+                process.pid,
+            )
+    if return_code != 0:
+        LOGGER.error("子流程失败 script=%s returncode=%s", script, return_code)
         raise CoordinatorError(
-            f"{script} 失败，退出码 {result.returncode}",
-            exit_code=result.returncode if propagate_exit_code else 6,
+            f"{script} 失败，退出码 {return_code}",
+            exit_code=return_code if propagate_exit_code else 6,
         )
     LOGGER.info("子流程完成 script=%s", script)
 
@@ -100,16 +124,30 @@ def config_args(config: Config) -> list[str]:
     return ["--config", str(config.path)]
 
 
-def do_capture(config: Config, duration: int | None) -> None:
+def do_capture(
+    config: Config,
+    duration: int | None,
+    *,
+    fresh_output: bool = False,
+) -> str:
+    original = json.loads(json.dumps(config.data))
     seconds = duration or int(config.get("capture", "duration", default=30))
     interface = config.get("device", "interface")
-    output = config.get("capture", "pcap_file")
+    output = None if fresh_output else config.get("capture", "pcap_file")
     args = ["--capture-only", str(seconds), *config_args(config)]
     if interface:
         args.extend(("--interface", str(interface)))
     if output:
         args.extend(("--capture-output", str(output)))
     run_script("ipoedhcp.py", args, f"开始抓包: {seconds}s")
+    config.load()
+    captured = str(config.get("capture", "pcap_file", default=""))
+    if not captured:
+        raise CoordinatorError("抓包完成但未返回输出路径")
+    if fresh_output:
+        config.data = original
+        config.save()
+    return captured
 
 
 def do_extract(config: Config, pcap: str | None) -> None:
@@ -141,33 +179,148 @@ def do_restore(log_level: str | None = None) -> None:
     )
 
 
+def select_interface(config: Config) -> InterfaceInfo | None:
+    selector = config.get("device", "interface")
+    current: InterfaceInfo | None = None
+    if selector:
+        try:
+            current = resolve_interface(selector)
+        except InterfaceError as exc:
+            print(f"当前网卡不可用: {exc}")
+
+    interfaces = list_interfaces(include_virtual=True)
+    states = windows_interface_states()
+    risky = False
+    if states:
+        safe_interfaces = [item for item in interfaces if states.get(item.index) and states[item.index].safe]
+        if safe_interfaces:
+            interfaces = safe_interfaces
+        else:
+            risky = True
+    if not interfaces:
+        interfaces = list_interfaces(include_virtual=True)
+    if not interfaces:
+        raise CoordinatorError("未找到可用网络接口")
+    print("\n可用网络接口:")
+    for interface in interfaces:
+        state = states.get(interface.index)
+        suffix = f" | 风险: {state.reason}" if state and not state.safe else ""
+        print(f"  {interface.display()}{suffix}")
+    while True:
+        default = f" [Enter 使用当前: {current.index}]" if current else ""
+        selector = input(
+            f"选择网卡 ifIndex/名称{default} [0 返回]: "
+        ).strip()
+        if selector == "0":
+            return None
+        if not selector and current is not None:
+            interface = current
+            state = states.get(interface.index)
+            if state and not state.safe:
+                confirmation = input(
+                    f"该接口存在风险（{state.reason}），输入 USE 继续，其他输入取消: "
+                ).strip()
+                if confirmation != "USE":
+                    print("已取消风险接口选择。")
+                    return None
+            config.set(interface.pcap_name, "device", "interface")
+            config.save()
+            print(f"已选择网卡: {interface.display()}")
+            return interface
+        if not selector:
+            print("必须选择网络接口；输入 0 返回主菜单。")
+            continue
+        try:
+            interface = resolve_interface(selector)
+        except InterfaceError as exc:
+            print(f"网卡选择无效: {exc}")
+            continue
+        state = states.get(interface.index)
+        if state and not state.safe:
+            confirmation = input(
+                f"该接口存在风险（{state.reason}），输入 USE 继续，其他输入取消: "
+            ).strip()
+            if confirmation != "USE":
+                print("已取消风险接口选择。")
+                return None
+        elif risky:
+            raise CoordinatorError("所选接口状态已失效，请刷新后重试")
+        config.set(interface.pcap_name, "device", "interface")
+        config.save()
+        print(f"已选择网卡: {interface.display()}")
+        return interface
+
+
+def after_extract(config: Config) -> int | None:
+    while True:
+        print("\n参数提取完成，下一步:")
+        print("1. 直接拨号  2. 返回主菜单  0. 退出")
+        choice = input("选择: ").strip()
+        if choice == "1":
+            if select_interface(config) is not None:
+                do_dhcp(config)
+            return None
+        if choice == "2":
+            return None
+        if choice == "0":
+            return 0
+        print("无效选择，请输入 0、1 或 2。")
+
+
 def interactive(config: Config) -> int:
     while True:
         print("\nIPoE DHCP 统筹管理器")
         print(f"MAC: {config.get('device', 'mac', default='(未设置)')}")
         print(
-            "1. 导入/抓包  2. 提取参数  3. 直接拨号  4. 完整流程  "
-            "5. 查看配置  6. 恢复网卡  0. 退出"
+            f"网卡: {config.get('device', 'interface', default='(未选择)')}"
         )
-        choice = input("选择: ").strip()
+        restricted = JOURNAL.exists()
+        if restricted:
+            print(f"警告：存在待恢复 journal，仅允许查看配置、恢复网卡或退出: {JOURNAL}")
+            print("5. 查看配置  6. 恢复网卡  0. 退出")
+        else:
+            print(
+                "1. 抓包  2. 提取参数  3. 直接拨号  4. 完整流程  "
+                "5. 查看配置  6. 恢复网卡  0. 退出"
+            )
         try:
+            choice = input("选择: ").strip()
+            if choice == "":
+                continue
+            if restricted and choice not in {"0", "5", "6"}:
+                print("操作被拒绝：必须先成功恢复网卡并删除 journal。")
+                continue
             if choice == "1":
                 seconds = input("抓包时长秒数 [30]: ").strip() or "30"
                 config.set(int(seconds), "capture", "duration")
-                interface = input("网卡 GUID/ifIndex/名称: ").strip()
-                if interface:
-                    config.set(interface, "device", "interface")
+                if select_interface(config) is None:
+                    continue
                 config.save()
-                do_capture(config, int(seconds))
+                captured = do_capture(
+                    config,
+                    int(seconds),
+                    fresh_output=True,
+                )
+                print(f"抓包已保存，正式配置未改变: {captured}")
             elif choice == "2":
                 source = input("PCAP/PCAPNG 路径: ").strip()
                 do_extract(config, source)
+                result = after_extract(config)
+                if result is not None:
+                    return result
             elif choice == "3":
-                do_dhcp(config)
+                if select_interface(config) is not None:
+                    do_dhcp(config)
             elif choice == "4":
+                if select_interface(config) is None:
+                    continue
                 config.save()
-                do_capture(config, int(config.get("capture", "duration", default=30)))
-                do_extract(config, config.get("capture", "pcap_file"))
+                captured = do_capture(
+                    config,
+                    int(config.get("capture", "duration", default=30)),
+                    fresh_output=True,
+                )
+                do_extract(config, captured)
                 do_dhcp(config)
             elif choice == "5":
                 print(json.dumps(config.data, indent=2, ensure_ascii=False))
@@ -175,7 +328,13 @@ def interactive(config: Config) -> int:
                 do_restore()
             elif choice == "0":
                 return 0
-        except (ValueError, CoordinatorError, ConfigError) as exc:
+            else:
+                print("无效选择。")
+        except (KeyboardInterrupt, EOFError):
+            print("\n已取消，正常退出。")
+            LOGGER.info("交互流程由用户取消")
+            return 0
+        except (ValueError, CoordinatorError, ConfigError, InterfaceError) as exc:
             LOGGER.error("交互流程失败 error=%s", exc)
 
 
@@ -192,6 +351,11 @@ def main(argv: list[str] | None = None) -> int:
             logging_ready = True
             do_restore(args.log_level)
             return 0
+        if JOURNAL.exists() and not args.show:
+            raise CoordinatorError(
+                f"存在待恢复 journal，必须先执行 --restore: {JOURNAL}",
+                exit_code=5,
+            )
         config = Config(args.config)
         configure_logging(
             level_name=args.log_level,

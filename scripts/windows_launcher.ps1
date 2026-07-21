@@ -64,6 +64,145 @@ function Get-NativeWindowsArchitecture {
     }
 }
 
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Invoke-VerifiedDownload {
+    param(
+        [Parameter(Mandatory = $true)][string] $Url,
+        [Parameter(Mandatory = $true)][string] $ExpectedSha256,
+        [Parameter(Mandatory = $true)][string] $Destination
+    )
+
+    Write-LauncherLog -Level INFO -Message "下载运行依赖 url=$Url"
+    Invoke-WebRequest -Uri $Url -OutFile $Destination
+    $actual = Get-FileSha256 -Path $Destination
+    if ($actual -ne $ExpectedSha256.ToLowerInvariant()) {
+        throw "依赖 SHA-256 不匹配: expected=$ExpectedSha256 actual=$actual"
+    }
+}
+
+function Remove-StaleTemporaryFiles {
+    $temporaryDirectory = Join-Path $RootDirectory '.temp'
+    if (-not (Test-Path -LiteralPath $temporaryDirectory -PathType Container)) {
+        return
+    }
+    $cutoff = (Get-Date).AddHours(-24)
+    foreach ($directory in @(Get-ChildItem -LiteralPath $temporaryDirectory -Directory -Filter 'runtime-install-*')) {
+        $ownerPath = Join-Path $directory.FullName 'owner.json'
+        $remove = $false
+        if (Test-Path -LiteralPath $ownerPath -PathType Leaf) {
+            try {
+                $owner = Get-Content -LiteralPath $ownerPath -Raw | ConvertFrom-Json
+                Get-Process -Id ([int] $owner.pid) -ErrorAction Stop | Out-Null
+            } catch {
+                $remove = $true
+            }
+        } elseif ($directory.LastWriteTime -lt $cutoff) {
+            $remove = $true
+        }
+        if ($remove) {
+            try {
+                Remove-Item -LiteralPath $directory.FullName -Recurse -Force
+            } catch {
+                Write-LauncherLog -Level INFO -Message (
+                    "临时目录清理失败 path=$($directory.FullName) error=$($_.Exception.Message)"
+                )
+            }
+        }
+    }
+    foreach ($file in @(Get-ChildItem -LiteralPath $temporaryDirectory -File -Filter '*.tmp' -Recurse)) {
+        if ($file.LastWriteTime -lt $cutoff) {
+            try {
+                Remove-Item -LiteralPath $file.FullName -Force
+            } catch {
+                Write-LauncherLog -Level INFO -Message (
+                    "临时文件清理失败 path=$($file.FullName) error=$($_.Exception.Message)"
+                )
+            }
+        }
+    }
+}
+
+function Install-PythonRuntime {
+    param([Parameter(Mandatory = $true)][string] $Architecture)
+
+    $lockPath = Join-Path $RootDirectory 'release-dependencies.json'
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    $python = $lock.python.architectures.$Architecture
+    if ($null -eq $python) {
+        throw "依赖清单缺少 Python $Architecture"
+    }
+    $downloadDirectory = Join-Path $RootDirectory '.temp\downloads'
+    $stagingDirectory = Join-Path $RootDirectory (
+        '.temp\runtime-install-' + [Guid]::NewGuid().ToString('N')
+    )
+    $runtimeDirectory = Join-Path $RootDirectory 'runtime'
+    if (Test-Path -LiteralPath $runtimeDirectory) {
+        throw "runtime 目录已存在但没有可用的 Python，请保留日志并检查该目录"
+    }
+    New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
+    New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
+    [IO.File]::WriteAllText(
+        (Join-Path $stagingDirectory 'owner.json'),
+        ('{"pid":' + $PID + '}'),
+        $Utf8NoBom
+    )
+    $pythonArchive = Join-Path $downloadDirectory (
+        "python-$($lock.python.version)-embeddable-$Architecture.zip"
+    )
+    $scapyArchive = Join-Path $downloadDirectory "scapy-$($lock.scapy.version).whl"
+    try {
+        Invoke-VerifiedDownload `
+            -Url ([string] $python.url) `
+            -ExpectedSha256 ([string] $python.sha256) `
+            -Destination $pythonArchive
+        Expand-Archive -LiteralPath $pythonArchive -DestinationPath $stagingDirectory
+
+        $pth = Get-ChildItem -LiteralPath $stagingDirectory -Filter 'python*._pth' |
+            Select-Object -First 1 -ExpandProperty FullName
+        if ([string]::IsNullOrWhiteSpace($pth)) {
+            throw 'Python embeddable runtime 缺少 python*._pth'
+        }
+        $pthContent = [IO.File]::ReadAllText($pth, $Utf8NoBom)
+        $pthContent = $pthContent -replace '#import site', 'import site'
+        if ($pthContent -notmatch '(?m)^\.\.$') {
+            $pthContent = $pthContent.TrimEnd("`r", "`n") + "`r`n..`r`n"
+        }
+        if ($pthContent -notmatch '(?m)^Lib\\site-packages$') {
+            $pthContent = (
+                $pthContent.TrimEnd("`r", "`n") +
+                "`r`nLib\site-packages`r`n"
+            )
+        }
+        [IO.File]::WriteAllText($pth, $pthContent, $Utf8NoBom)
+
+        $sitePackages = Join-Path $stagingDirectory 'Lib\site-packages'
+        New-Item -ItemType Directory -Path $sitePackages -Force | Out-Null
+        Invoke-VerifiedDownload `
+            -Url ([string] $lock.scapy.url) `
+            -ExpectedSha256 ([string] $lock.scapy.sha256) `
+            -Destination $scapyArchive
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($scapyArchive, $sitePackages)
+        Remove-Item -LiteralPath (Join-Path $stagingDirectory 'owner.json') -Force
+        Move-Item -LiteralPath $stagingDirectory -Destination $runtimeDirectory
+        Remove-Item -LiteralPath $pythonArchive -Force
+        Remove-Item -LiteralPath $scapyArchive -Force
+        Write-LauncherLog -Level INFO -Message (
+            "Python runtime 安装完成 version=$($lock.python.version) architecture=$Architecture"
+        )
+    } catch {
+        if (Test-Path -LiteralPath $stagingDirectory) {
+            Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
+        }
+        throw
+    }
+}
+
 function Test-PythonCandidate {
     param(
         [Parameter(Mandatory = $true)]
@@ -150,6 +289,7 @@ function Find-Python {
 }
 
 Set-Location -LiteralPath $RootDirectory
+Remove-StaleTemporaryFiles
 Write-LauncherLog -Level INFO -Message (
     "PowerShell 启动 edition=$($PSVersionTable.PSEdition) version=$($PSVersionTable.PSVersion)"
 )
@@ -193,9 +333,18 @@ try {
 
 $python = Find-Python -RequiredArchitecture $requiredArchitecture
 if ($null -eq $python) {
-    Stop-Launcher `
-        -Message "未找到 Python 3.9–3.14（$requiredArchitecture）。请使用对应架构的便携包或安装匹配的 Python。" `
-        -ExitCode 5
+    Write-LauncherLog -Level INFO -Message (
+        "未找到 Python 3.9–3.14（$requiredArchitecture），开始安装锁定运行时"
+    )
+    try {
+        Install-PythonRuntime -Architecture $requiredArchitecture
+        $python = Find-Python -RequiredArchitecture $requiredArchitecture
+        if ($null -eq $python) {
+            throw '运行时安装完成但 Python 验证失败'
+        }
+    } catch {
+        Stop-Launcher -Message "Python 运行时自动安装失败: $($_.Exception.Message)" -ExitCode 5
+    }
 }
 
 Write-LauncherLog -Level INFO -Message (

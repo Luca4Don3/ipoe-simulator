@@ -103,6 +103,24 @@ def _run_capture(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _restore_transaction(transaction: NetworkTransaction) -> bool:
+    while True:
+        try:
+            LOGGER.info("开始恢复网卡状态 journal=%s", JOURNAL)
+            transaction.restore()
+            LOGGER.info("网卡状态恢复并验证成功")
+            return True
+        except KeyboardInterrupt:
+            LOGGER.warning("恢复期间收到重复停止请求，将继续恢复网卡")
+        except NetworkStateError as exc:
+            LOGGER.critical(
+                "严重错误：网卡恢复失败 error=%s journal=%s",
+                exc,
+                JOURNAL,
+            )
+            return False
+
+
 def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
     ensure_runtime(auto_install=True, require_admin=True)
     config.validate_for_dhcp()
@@ -150,17 +168,14 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
     finally:
         try:
             client.release()
+        except KeyboardInterrupt:
+            LOGGER.warning("DHCP Release 期间收到重复停止请求，继续恢复网卡")
         except DhcpError as exc:
             LOGGER.error("DHCP Release 失败 error=%s", exc)
             if exit_code == 0:
                 exit_code = 4
         if transaction is not None:
-            try:
-                LOGGER.info("开始恢复网卡状态 journal=%s", JOURNAL)
-                transaction.restore()
-                LOGGER.info("网卡状态恢复并验证成功")
-            except NetworkStateError as exc:
-                LOGGER.critical("严重错误：网卡恢复失败 error=%s journal=%s", exc, JOURNAL)
+            if not _restore_transaction(transaction):
                 exit_code = 5
     return exit_code
 
@@ -173,6 +188,10 @@ def main(argv: list[str] | None = None) -> int:
             configure_logging(level_name=args.log_level, log_directory=ROOT)
             logging_ready = True
             return _run_restore()
+        if JOURNAL.exists() and not args.list_interfaces:
+            raise NetworkStateError(
+                f"存在待恢复 journal，必须先执行 --restore: {JOURNAL}"
+            )
         config = Config(args.config)
         configure_logging(
             level_name=args.log_level,

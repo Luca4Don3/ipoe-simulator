@@ -155,6 +155,11 @@ def restore_from_journal(
         _restore_from_journal_locked(path, backend=backend)
     finally:
         lock.release()
+        if not path.exists():
+            try:
+                lock.path.unlink(missing_ok=True)
+            except OSError as exc:
+                LOGGER.warning("恢复成功但无法清理空闲 journal lock path=%s error=%s", lock.path, exc)
 
 
 def _restore_from_journal_locked(
