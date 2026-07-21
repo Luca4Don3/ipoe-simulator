@@ -11,6 +11,15 @@ LAUNCHER = ROOT / "scripts" / "windows_launcher.ps1"
 
 
 class WindowsLauncherTests(unittest.TestCase):
+    def test_launcher_cleans_only_bounded_temporary_assets(self) -> None:
+        text = (ROOT / "scripts" / "windows_launcher.ps1").read_text(encoding="utf-8")
+        self.assertIn("Remove-StaleTemporaryFiles", text)
+        self.assertIn("owner.json", text)
+        self.assertIn("AddHours(-24)", text)
+        self.assertIn("Remove-Item -LiteralPath $pythonArchive", text)
+        self.assertIn("Remove-Item -LiteralPath $scapyArchive", text)
+        self.assertNotIn("Remove-Item -LiteralPath $runtimeDirectory", text)
+
     def test_batch_launcher_prefers_powershell_7_and_propagates_exit_code(self) -> None:
         content = RUN_CMD.read_text(encoding="utf-8")
         self.assertLess(content.index("where pwsh.exe"), content.index("where powershell.exe"))
@@ -35,6 +44,12 @@ class WindowsLauncherTests(unittest.TestCase):
             "-PassThru",
             "NativeErrorCode -eq 1223",
             "runtime\\python.exe",
+            "Install-PythonRuntime",
+            "Invoke-VerifiedDownload",
+            "Get-FileHash",
+            "Expand-Archive",
+            "ExtractToDirectory",
+            "依赖 SHA-256 不匹配",
             "Get-Command 'py.exe'",
             "[Version]'3.9.0'",
             "[Version]'3.15.0'",
@@ -57,6 +72,11 @@ class WindowsLauncherTests(unittest.TestCase):
         ).stdout.splitlines()
         self.assertIn("run.cmd: eol: crlf", attributes)
         self.assertIn("run.sh: eol: lf", attributes)
+        for path in (RUN_CMD, LAUNCHER):
+            with self.subTest(path=path.name):
+                content = path.read_bytes()
+                self.assertIn(b"\r\n", content)
+                self.assertNotIn(b"\n", content.replace(b"\r\n", b""))
 
 
 if __name__ == "__main__":

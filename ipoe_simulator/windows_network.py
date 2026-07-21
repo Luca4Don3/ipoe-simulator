@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from .interfaces import InterfaceInfo
@@ -207,11 +208,16 @@ def _restore_script(snapshot: dict[str, Any]) -> str:
             lines.append(
                 "Set-DnsClientServerAddress -InterfaceIndex $idx -ResetServerAddresses -ErrorAction Stop"
             )
-    auto = "Enabled" if automatic_metric else "Disabled"
-    lines.append(
-        f"Set-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 -AutomaticMetric {auto} "
-        f"-InterfaceMetric {metric} -ErrorAction Stop"
-    )
+    if automatic_metric:
+        lines.append(
+            "Set-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 "
+            "-AutomaticMetric Enabled -ErrorAction Stop"
+        )
+    else:
+        lines.append(
+            "Set-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 "
+            f"-AutomaticMetric Disabled -InterfaceMetric {metric} -ErrorAction Stop"
+        )
     return "\n".join(lines)
 
 
@@ -309,6 +315,19 @@ class WindowsNetworkBackend(NetworkBackend):
         snapshot: dict[str, Any],
     ) -> None:
         _run_powershell(_restore_script(snapshot), timeout=90)
+
+        deadline = time.monotonic() + 15.0
+        last_errors: list[str] = []
+        while True:
+            current = capture_snapshot(interface.index)
+            last_errors = verify_restored(snapshot, current, None)
+            if not last_errors:
+                return
+            if time.monotonic() >= deadline:
+                raise NetworkStateError(
+                    "Windows 网卡恢复在 15 秒内未收敛: " + "; ".join(last_errors)
+                )
+            time.sleep(0.5)
 
     def verify_restored(
         self,

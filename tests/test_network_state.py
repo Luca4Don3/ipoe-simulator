@@ -2,10 +2,35 @@ from __future__ import annotations
 
 import unittest
 
-from ipoe_simulator.windows_network import verify_restored
+from ipoe_simulator.windows_network import _restore_script, verify_restored
 
 
 class NetworkStateTests(unittest.TestCase):
+    def test_automatic_metric_restore_does_not_write_manual_metric(self) -> None:
+        script = _restore_script({
+            "interface_index": 7,
+            "dhcp": "Enabled",
+            "automatic_metric": "Enabled",
+            "interface_metric": 42,
+        })
+        metric_line = next(line for line in script.splitlines() if "-AutomaticMetric" in line)
+        self.assertIn("-AutomaticMetric Enabled", metric_line)
+        self.assertNotIn("-InterfaceMetric", metric_line)
+
+    def test_manual_metric_restore_writes_original_metric(self) -> None:
+        script = _restore_script({
+            "interface_index": 7,
+            "dhcp": "Disabled",
+            "automatic_metric": "Disabled",
+            "interface_metric": 42,
+            "addresses": [],
+            "routes": [],
+            "dns_servers": [],
+        })
+        metric_line = next(line for line in script.splitlines() if "-AutomaticMetric" in line)
+        self.assertIn("-AutomaticMetric Disabled", metric_line)
+        self.assertIn("-InterfaceMetric 42", metric_line)
+
     def test_static_state_matches(self) -> None:
         snapshot = {
             "dhcp": "Disabled",
