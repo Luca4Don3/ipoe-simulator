@@ -36,6 +36,15 @@ function Stop-Launcher {
     exit $ExitCode
 }
 
+function Stop-RestoreArguments {
+    param([Parameter(Mandatory = $true)][string] $Message)
+
+    Write-LauncherLog -Level ERROR -Message $Message
+    [Console]::Error.WriteLine("错误: $Message")
+    [Console]::Error.WriteLine('唯一正确命令: .\run.cmd --restore')
+    exit 2
+}
+
 function ConvertTo-NativeArgument {
     param([AllowEmptyString()][string] $Value)
 
@@ -263,7 +272,10 @@ function Find-Python {
     $candidates = @()
     $bundled = Join-Path $RootDirectory 'runtime\python.exe'
     if (Test-Path -LiteralPath $bundled -PathType Leaf) {
-        $candidates += ,@($bundled, @())
+        return Test-PythonCandidate `
+            -Executable $bundled `
+            -PrefixArguments @() `
+            -RequiredArchitecture $RequiredArchitecture
     }
     $launcher = Get-Command 'py.exe' -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
@@ -293,6 +305,25 @@ Remove-StaleTemporaryFiles
 Write-LauncherLog -Level INFO -Message (
     "PowerShell 启动 edition=$($PSVersionTable.PSEdition) version=$($PSVersionTable.PSVersion)"
 )
+
+$restoreMode = $false
+if ($LauncherArguments -contains '-restore') {
+    Stop-RestoreArguments -Message '不支持 -restore'
+}
+if ($LauncherArguments -contains '--restore') {
+    if ($LauncherArguments.Count -eq 1 -and $LauncherArguments[0] -eq '--restore') {
+        $restoreMode = $true
+    } elseif (
+        $LauncherArguments.Count -eq 3 -and
+        $LauncherArguments[0] -eq '--restore' -and
+        $LauncherArguments[1] -eq '--log-level' -and
+        $LauncherArguments[2] -in @('INFO', 'DEBUG')
+    ) {
+        $restoreMode = $true
+    } else {
+        Stop-RestoreArguments -Message '--restore 仅允许附加 --log-level INFO|DEBUG'
+    }
+}
 
 if (-not (Test-IsAdministrator)) {
     $powerShellExecutable = (Get-Process -Id $PID).Path
@@ -331,6 +362,21 @@ try {
     Stop-Launcher -Message $_.Exception.Message -ExitCode 5
 }
 
+$bundledPython = Join-Path $RootDirectory 'runtime\python.exe'
+$journalPath = Join-Path $RootDirectory '.temp\network-recovery.json'
+if (
+    $restoreMode -and
+    (Test-Path -LiteralPath $journalPath -PathType Leaf) -and
+    -not (Test-Path -LiteralPath $bundledPython -PathType Leaf)
+) {
+    Write-LauncherLog -Level INFO -Message '存在待恢复 journal，优先安装锁定运行时'
+    try {
+        Install-PythonRuntime -Architecture $requiredArchitecture
+    } catch {
+        Stop-Launcher -Message "Python 运行时自动安装失败: $($_.Exception.Message)" -ExitCode 5
+    }
+}
+
 $python = Find-Python -RequiredArchitecture $requiredArchitecture
 if ($null -eq $python) {
     Write-LauncherLog -Level INFO -Message (
@@ -351,9 +397,13 @@ Write-LauncherLog -Level INFO -Message (
     "Python 已选择 executable=$($python.Executable) version=$($python.Version) architecture=$($python.Architecture)"
 )
 
-$coordinator = Join-Path $RootDirectory 'coordinator.py'
+$businessScript = if ($restoreMode) {
+    Join-Path $RootDirectory 'ipoedhcp.py'
+} else {
+    Join-Path $RootDirectory 'coordinator.py'
+}
 try {
-    & $python.Executable @($python.PrefixArguments) -u $coordinator @LauncherArguments
+    & $python.Executable @($python.PrefixArguments) -u $businessScript @LauncherArguments
     $exitCode = $LASTEXITCODE
 } catch {
     Write-LauncherLog -Level ERROR -Message "业务进程启动失败 error=$($_.Exception.Message)"
@@ -361,7 +411,12 @@ try {
     $exitCode = 6
 }
 
-if ($exitCode -ne 0) {
+if ($restoreMode) {
+    Write-LauncherLog -Level $(if ($exitCode -eq 0) { 'INFO' } else { 'ERROR' }) -Message (
+        "恢复进程结束 exit_code=$exitCode"
+    )
+    exit $exitCode
+} elseif ($exitCode -ne 0) {
     Write-LauncherLog -Level ERROR -Message "业务进程异常退出 exit_code=$exitCode"
     [Console]::Error.WriteLine("错误: IPoE Simulator 异常退出，退出码 $exitCode。")
 } else {

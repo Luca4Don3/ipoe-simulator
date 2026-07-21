@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -181,6 +182,19 @@ def _restore_from_journal_locked(
         )
     interface = _journal_interface(journal)
     snapshot = journal["snapshot"]
+    attempts = journal.get("restore_attempts")
+    if not isinstance(attempts, list):
+        attempts = []
+    attempt: dict[str, Any] = {
+        "started_at": int(time.time()),
+        "ended_at": None,
+        "phase": "starting",
+        "last_completed_step": "恢复开始",
+        "error": None,
+    }
+    attempts.append(attempt)
+    journal["restore_attempts"] = attempts[-20:]
+    journal["total_restore_attempts"] = int(journal.get("total_restore_attempts", 0)) + 1
     journal["status"] = "restoring"
     journal["updated_at"] = int(time.time())
     atomic_write_json(path, journal)
@@ -190,11 +204,30 @@ def _restore_from_journal_locked(
         interface.index,
         path,
     )
+
+    def progress(phase: str, step: str) -> None:
+        attempt["phase"] = phase
+        attempt["last_completed_step"] = step
+        journal["updated_at"] = int(time.time())
+        atomic_write_json(path, journal)
+        LOGGER.info(
+            "恢复进度 phase=%s step=%s journal=%s",
+            phase,
+            step,
+            path,
+        )
+
     try:
-        selected.restore(interface, snapshot)
-        current = selected.capture_snapshot(interface)
-        errors = selected.verify_restored(snapshot, current, journal.get("app_ip"))
-    except Exception as exc:
+        with _defer_interrupts():
+            errors = selected.restore_and_verify(
+                interface,
+                snapshot,
+                journal.get("app_ip"),
+                progress,
+            )
+    except BaseException as exc:
+        attempt["ended_at"] = int(time.time())
+        attempt["error"] = str(exc)
         journal["status"] = "restore_failed"
         journal["restore_errors"] = [str(exc)]
         journal["updated_at"] = int(time.time())
@@ -205,14 +238,51 @@ def _restore_from_journal_locked(
         LOGGER.critical("恢复失败，网卡状态可能未恢复 error=%s journal=%s", exc, path)
         raise NetworkStateError(f"恢复执行失败: {exc}") from exc
     if errors:
+        attempt["ended_at"] = int(time.time())
+        attempt["error"] = "; ".join(errors)
         journal["status"] = "restore_failed"
         journal["restore_errors"] = errors
         journal["updated_at"] = int(time.time())
         atomic_write_json(path, journal)
         LOGGER.critical("恢复校验失败，网卡状态可能未恢复 errors=%s journal=%s", errors, path)
         raise NetworkStateError("; ".join(errors))
-    LOGGER.info("恢复成功并删除日志 journal=%s", path)
+    attempt["ended_at"] = int(time.time())
+    attempt["phase"] = "verification"
+    attempt["last_completed_step"] = "校验通过"
+    journal["status"] = "restored"
+    journal["updated_at"] = int(time.time())
+    atomic_write_json(path, journal)
+    LOGGER.info("恢复校验通过 journal=%s", path)
     path.unlink(missing_ok=True)
+    LOGGER.info("journal 删除完成 journal=%s", path)
+
+
+class _defer_interrupts:
+    """恢复期间记录后续 Ctrl+C，但不让同一恢复流程重入。"""
+
+    def __init__(self) -> None:
+        self.previous: Any = None
+        self.active = False
+
+    def __enter__(self) -> "_defer_interrupts":
+        if hasattr(signal, "SIGINT"):
+            try:
+                self.previous = signal.getsignal(signal.SIGINT)
+                signal.signal(signal.SIGINT, self._handle)
+                self.active = True
+            except (ValueError, OSError):
+                pass
+        return self
+
+    @staticmethod
+    def _handle(signum: int, frame: Any) -> None:
+        del signum, frame
+        LOGGER.warning("恢复期间收到重复停止请求，将继续当前有界恢复")
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        del exc_type, exc, traceback
+        if self.active:
+            signal.signal(signal.SIGINT, self.previous)
 
 
 @dataclass
@@ -290,6 +360,8 @@ class NetworkTransaction:
                 "app_ip": self.app_ip,
                 "interface": self.interface.to_dict(),
                 "snapshot": self.snapshot,
+                "total_restore_attempts": 0,
+                "restore_attempts": [],
             },
         )
         LOGGER.debug(

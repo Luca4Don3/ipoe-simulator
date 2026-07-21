@@ -104,21 +104,18 @@ def _run_capture(config: Config, args: argparse.Namespace) -> int:
 
 
 def _restore_transaction(transaction: NetworkTransaction) -> bool:
-    while True:
-        try:
-            LOGGER.info("开始恢复网卡状态 journal=%s", JOURNAL)
-            transaction.restore()
-            LOGGER.info("网卡状态恢复并验证成功")
-            return True
-        except KeyboardInterrupt:
-            LOGGER.warning("恢复期间收到重复停止请求，将继续恢复网卡")
-        except NetworkStateError as exc:
-            LOGGER.critical(
-                "严重错误：网卡恢复失败 error=%s journal=%s",
-                exc,
-                JOURNAL,
-            )
-            return False
+    try:
+        LOGGER.info("开始恢复网卡状态 journal=%s", JOURNAL)
+        transaction.restore()
+        LOGGER.info("网卡状态恢复并验证成功")
+        return True
+    except NetworkStateError as exc:
+        LOGGER.critical(
+            "严重错误：网卡恢复失败 error=%s journal=%s",
+            exc,
+            JOURNAL,
+        )
+        return False
 
 
 def _run_dhcp(config: Config, args: argparse.Namespace) -> int:

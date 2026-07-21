@@ -54,6 +54,11 @@ class CliCompatibilityTests(unittest.TestCase):
         self.assertEqual(args.extract, "capture.pcap")
         self.assertTrue(args.dhcp)
 
+    def test_removed_all_action_is_rejected(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            coordinator.parser().parse_args(["--all"])
+        self.assertEqual(raised.exception.code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

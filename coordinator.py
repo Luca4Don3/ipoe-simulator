@@ -77,7 +77,6 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--capture", nargs="?", const=True, metavar="秒数")
     p.add_argument("--extract", nargs="?", const=True, metavar="PCAP")
     p.add_argument("--dhcp", action="store_true")
-    p.add_argument("--all", action="store_true")
     p.add_argument("--mac", "-m")
     p.add_argument("--interface")
     for code in OPTION_CODES:
@@ -99,7 +98,6 @@ def validate_actions(p: argparse.ArgumentParser, args: argparse.Namespace) -> No
         args.capture is not None,
         args.extract is not None,
         args.dhcp,
-        args.all,
         args.show,
         args.reset,
         args.interactive,
@@ -370,7 +368,7 @@ def interactive(config: Config) -> int:
             print("5. 查看配置  6. 恢复网卡  0. 退出")
         else:
             print(
-                "1. 抓包  2. 提取参数  3. 直接拨号  4. 完整流程  "
+                "1. 抓包  2. 提取参数  3. 直接拨号  "
                 "5. 查看配置  6. 恢复网卡  7. 清空配置  8. 手动填写  0. 退出"
             )
         try:
@@ -401,17 +399,6 @@ def interactive(config: Config) -> int:
             elif choice == "3":
                 if select_interface(config) is not None:
                     do_dhcp(config)
-            elif choice == "4":
-                if select_interface(config) is None:
-                    continue
-                config.save()
-                captured = do_capture(
-                    config,
-                    int(config.get("capture", "duration", default=30)),
-                    fresh_output=True,
-                )
-                do_extract(config, captured)
-                do_dhcp(config)
             elif choice == "5":
                 print(json.dumps(config.data, indent=2, ensure_ascii=False))
             elif choice == "6":
@@ -465,22 +452,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.show:
             print(json.dumps(config.data, indent=2, ensure_ascii=False))
             return 0
-        if args.interactive or not any((args.capture is not None, args.extract is not None, args.dhcp, args.all)):
+        if args.interactive or not any((args.capture is not None, args.extract is not None, args.dhcp)):
             return interactive(config)
         config.save()
-        if args.all:
-            do_capture(config, args.duration)
-            do_extract(config, config.get("capture", "pcap_file"))
+        if args.capture is not None:
+            duration = int(args.capture) if str(args.capture).isdigit() else args.duration
+            do_capture(config, duration)
+        if args.extract is not None:
+            source = args.extract if isinstance(args.extract, str) else args.pcap
+            do_extract(config, source)
+        if args.dhcp:
             do_dhcp(config)
-        else:
-            if args.capture is not None:
-                duration = int(args.capture) if str(args.capture).isdigit() else args.duration
-                do_capture(config, duration)
-            if args.extract is not None:
-                source = args.extract if isinstance(args.extract, str) else args.pcap
-                do_extract(config, source)
-            if args.dhcp:
-                do_dhcp(config)
         return 0
     except (CoordinatorError, ConfigError, ValueError) as exc:
         if not logging_ready:

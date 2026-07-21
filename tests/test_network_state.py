@@ -16,6 +16,9 @@ class NetworkStateTests(unittest.TestCase):
         metric_line = next(line for line in script.splitlines() if "-AutomaticMetric" in line)
         self.assertIn("-AutomaticMetric Enabled", metric_line)
         self.assertNotIn("-InterfaceMetric", metric_line)
+        self.assertNotIn("ipconfig.exe", script)
+        self.assertIn("-Dhcp Enabled", script)
+        self.assertIn("-ResetServerAddresses", script)
 
     def test_manual_metric_restore_writes_original_metric(self) -> None:
         script = _restore_script({
@@ -45,6 +48,37 @@ class NetworkStateTests(unittest.TestCase):
     def test_program_address_is_reported(self) -> None:
         snapshot = {"dhcp": "Disabled", "automatic_metric": "Enabled", "addresses": [], "routes": [], "dns_mode": "automatic", "dns_servers": []}
         current = {**snapshot, "addresses": [{"ip_address": "198.51.100.2", "prefix_length": 24, "prefix_origin": "Manual"}]}
+        errors = verify_restored(snapshot, current, "198.51.100.2")
+        self.assertTrue(any("程序配置的地址" in error for error in errors))
+
+    def test_dhcp_without_address_is_restored(self) -> None:
+        snapshot = {
+            "dhcp": "Enabled",
+            "automatic_metric": "Enabled",
+            "addresses": [],
+            "routes": [],
+            "dns_mode": "automatic",
+            "dns_servers": [],
+        }
+        self.assertEqual(verify_restored(snapshot, snapshot, "198.51.100.2"), [])
+
+    def test_dhcp_program_manual_address_is_reported(self) -> None:
+        snapshot = {
+            "dhcp": "Enabled",
+            "automatic_metric": "Enabled",
+            "addresses": [],
+            "routes": [],
+            "dns_mode": "automatic",
+            "dns_servers": [],
+        }
+        current = {
+            **snapshot,
+            "addresses": [{
+                "ip_address": "198.51.100.2",
+                "prefix_length": 24,
+                "prefix_origin": "Manual",
+            }],
+        }
         errors = verify_restored(snapshot, current, "198.51.100.2")
         self.assertTrue(any("程序配置的地址" in error for error in errors))
 
