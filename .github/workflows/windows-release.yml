@@ -54,7 +54,7 @@ jobs:
           $launcher = Join-Path $PWD 'scripts/windows_launcher.ps1'
           $null = [scriptblock]::Create([IO.File]::ReadAllText($launcher))
           if (-not (Test-Path -LiteralPath (Join-Path $PWD 'run.cmd'))) {
-            throw 'run.cmd 不存在'
+            throw 'run.cmd is missing'
           }
           Write-Output 'Windows PowerShell 5.1 launcher syntax OK'
       - name: Probe Windows PowerShell 5.1 network command types
@@ -73,7 +73,7 @@ jobs:
           foreach ($name in $required) {
             $command = Get-Command -Name $name -CommandType Cmdlet,Function -ErrorAction Stop
             if ($command.CommandType -notin @('Cmdlet', 'Function')) {
-              throw "$name 命令类型不受支持: $($command.CommandType)"
+              throw "$name command type is unsupported: $($command.CommandType)"
             }
             Write-Output "$name`: $($command.CommandType)"
           }
