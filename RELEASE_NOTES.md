@@ -1,3 +1,11 @@
+# IPoE Simulator v0.5.0
+
+本次 MINOR 更新新增交互式配置管理。“清空配置”必须输入区分大小写的 `CLEAR`，只把 JSON 恢复为完整 `DEFAULT_CONFIG`，不删除 PCAP、日志、runtime 或恢复 journal。
+
+“手动填写”支持 MAC、Option 12/43/50/60/61/125、点分十进制子网掩码、网关、DNS 和抓包时长。Enter 保留当前值，`-` 清空当前字段，无效输入留在当前字段继续输入；全部值先保存在内存草稿中，只有输入 `SAVE` 才原子写入，取消或中断不改变正式配置。JSON schema 与既有 CLI 保持不变。
+
+---
+
 # IPoE Simulator v0.4.2
 
 本修订版强化 Windows 恢复与交互安全：AutomaticMetric 自动模式不再同时写入 InterfaceMetric，手动模式恢复原指标；恢复最多等待 15 秒收敛，失败返回 `5` 并保留 journal。
