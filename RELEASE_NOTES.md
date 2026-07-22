@@ -1,3 +1,13 @@
+# IPoE Simulator v0.5.2
+
+本修订版改进 Windows 安全停止反馈。首次 `Ctrl+C` 会立即显示“已收到停止请求，正在安全恢复，请勿重复按键”，Offer/ACK 与续租等待会响应停止事件；重复中断会按 DHCP Release、网卡恢复与校验、退出阶段提示且不会重入清理。父统筹进程等待子进程安全结束后直接退出，不返回交互菜单；Windows 启动器不再显示结束暂停。正常安全停止返回 `0`，DHCP/Release 失败返回 `4`，恢复或校验失败返回 `5`。
+
+PowerShell 发现逻辑会枚举并去重 `pwsh.exe`，按语义版本只选择最高版本执行 UTF-8 和 NetAdapter/NetTCPIP/DNS cmdlet 能力探针。最高版本不可用或能力不足时直接回退 Windows PowerShell 5.1，不再尝试较旧 `pwsh.exe`；两者都失败时汇总候选路径、版本和原始原因。PowerShell 6.x 保持尽力兼容，但不作为主要实机矩阵。
+
+本版本已完成离线单测、跨平台导入、Windows 三架构静态包校验和敏感信息审计。Windows 10/11 x86/x64/ARM64 完整实机矩阵尚未执行；本次发布经明确授权豁免该门禁，因此不得将本版本表述为已通过完整 Windows 实机验收。
+
+---
+
 # IPoE Simulator v0.5.1
 
 本修订版修复 Windows 恢复被 DHCP 续租阻塞的问题。恢复不再显式执行 `ipconfig /renew`；地址和路由清理、DNS、DHCP 模式、AutomaticMetric 与 InterfaceMetric 的配置写入、状态收敛和校验共享 30 秒总预算。原状态为 DHCP 时允许 Windows 暂时尚未取得新地址，但程序写入的手动地址不得残留。

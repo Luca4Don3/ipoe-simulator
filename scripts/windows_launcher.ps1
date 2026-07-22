@@ -422,5 +422,4 @@ if ($restoreMode) {
 } else {
     Write-LauncherLog -Level INFO -Message '业务进程正常退出 exit_code=0'
 }
-[void] (Read-Host '按 Enter 键关闭窗口')
 exit $exitCode

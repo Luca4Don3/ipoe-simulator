@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 from pathlib import Path
 
 from ipoe_simulator.app_logging import LOG_LEVELS, LoggingError, configure_logging, get_logger
 from ipoe_simulator.capture import CaptureError, capture_dhcp, default_capture_path
-from ipoe_simulator.dhcp_client import DhcpClient, DhcpError
+from ipoe_simulator.dhcp_client import DhcpClient, DhcpError, DhcpStopped
 from ipoe_simulator.dependencies import DependencyError, ensure_runtime, is_admin
 from ipoe_simulator.interfaces import InterfaceError, list_interfaces, resolve_interface
 from ipoe_simulator.profile import Config, ConfigError, OPTION_CODES
@@ -23,6 +24,21 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / "ipoedhcp_config.json"
 JOURNAL = default_journal_path(ROOT)
 LOGGER = get_logger("cli")
+
+
+class StopController:
+    def __init__(self, client: DhcpClient):
+        self.client = client
+        self.requested = False
+        self.phase = "DHCP 交换"
+
+    def handle(self, _signum, _frame) -> None:
+        self.client.stop()
+        if not self.requested:
+            self.requested = True
+            LOGGER.warning("已收到停止请求，正在安全恢复，请勿重复按键")
+        else:
+            LOGGER.warning("%s阶段收到重复停止请求，安全清理仍在继续", self.phase)
 
 
 def _timeout(value: str) -> int:
@@ -132,6 +148,9 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
     client = DhcpClient(interface, config.get("device", "mac"), options, timeout=args.timeout)
     transaction: NetworkTransaction | None = None
     exit_code = 0
+    stop = StopController(client)
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, stop.handle)
     try:
         LOGGER.info("DHCP 事务开始 interface=%s", interface.display())
         LOGGER.info("保存网卡快照并准备进入 DHCP 模拟 journal=%s", JOURNAL)
@@ -156,24 +175,27 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
         else:
             LOGGER.info("auto_renew=false；租约到期后将自动恢复网卡")
             client.wait_until_expiry()
-    except KeyboardInterrupt:
-        LOGGER.info("收到停止请求")
-        client.stop()
+    except DhcpStopped:
+        LOGGER.info("DHCP 交换已按停止请求结束")
     except DhcpError as exc:
         LOGGER.error("DHCP 失败 error=%s", exc)
         exit_code = 4
     finally:
+        stop.phase = "DHCP Release"
         try:
             client.release()
-        except KeyboardInterrupt:
-            LOGGER.warning("DHCP Release 期间收到重复停止请求，继续恢复网卡")
         except DhcpError as exc:
             LOGGER.error("DHCP Release 失败 error=%s", exc)
             if exit_code == 0:
                 exit_code = 4
         if transaction is not None:
+            stop.phase = "网卡恢复与校验"
             if not _restore_transaction(transaction):
                 exit_code = 5
+        stop.phase = "退出"
+        signal.signal(signal.SIGINT, previous_sigint)
+        if stop.requested:
+            LOGGER.info("安全恢复流程结束，程序正常退出 exit_code=%s", exit_code)
     return exit_code
 
 
