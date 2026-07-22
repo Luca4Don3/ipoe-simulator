@@ -264,9 +264,24 @@ class CoordinatorInteractiveTests(unittest.TestCase):
                     return_value=process,
                 ),
             ):
-                coordinator.run_script("child.py", [], "test")
+                with self.assertRaises(coordinator.CoordinatorStop):
+                    coordinator.run_script("child.py", [], "test")
 
         self.assertEqual(process.wait.call_count, 2)
+
+    def test_child_failure_code_wins_after_parent_ctrl_c(self) -> None:
+        process = mock.Mock(pid=1234)
+        process.wait.side_effect = [KeyboardInterrupt, 5]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "child.py").write_text("", encoding="utf-8")
+            with (
+                mock.patch.object(coordinator, "ROOT", root),
+                mock.patch.object(coordinator.subprocess, "Popen", return_value=process),
+                self.assertRaises(coordinator.CoordinatorError) as raised,
+            ):
+                coordinator.run_script("child.py", [], "test", propagate_exit_code=True)
+        self.assertEqual(raised.exception.exit_code, 5)
 
 if __name__ == "__main__":
     unittest.main()

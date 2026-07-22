@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import glob
 import json
 import os
 import shutil
@@ -171,24 +172,26 @@ def _candidate_paths(name: str) -> list[str]:
             os.environ.get("ProgramW6432"),
             os.environ.get("LOCALAPPDATA"),
         ]
-        suffixes = (
-            os.path.join("PowerShell", "7", name),
-            os.path.join("Microsoft", "PowerShell", "7", name),
+        patterns = (
+            os.path.join("PowerShell", "*", name),
+            os.path.join("Microsoft", "PowerShell", "*", name),
         )
     else:
         roots = [os.environ.get("SystemRoot")]
-        suffixes = (os.path.join("System32", "WindowsPowerShell", "v1.0", name),)
+        patterns = (os.path.join("System32", "WindowsPowerShell", "v1.0", name),)
     extra_paths: list[str] = []
     for root in roots:
         if root:
-            extra_paths.append(os.path.join(root, suffixes[0]))
-            if len(suffixes) > 1:
-                extra_paths.append(os.path.join(root, suffixes[1]))
+            for pattern in patterns:
+                extra_paths.extend(glob.glob(os.path.join(root, pattern)))
     paths.extend(path for path in extra_paths if os.path.isfile(path))
-    return list(dict.fromkeys(paths))
+    unique: dict[str, str] = {}
+    for path in paths:
+        unique.setdefault(os.path.normcase(os.path.abspath(path)), path)
+    return list(unique.values())
 
 
-def _inspect_candidate(executable: str, name: str) -> PowerShellRuntime:
+def _inspect_version(executable: str, name: str) -> PowerShellRuntime:
     encoded = base64.b64encode(_VERSION_SCRIPT.encode("utf-16-le")).decode("ascii")
     try:
         result = subprocess.run(
@@ -215,32 +218,37 @@ def _inspect_candidate(executable: str, name: str) -> PowerShellRuntime:
         raise NetworkStateError(
             f"{name} 版本 {major}.{minor}.{patch} 过低；最低支持 PowerShell 5.1"
         )
-    runtime = PowerShellRuntime(executable, major, minor, patch, edition)
+    return PowerShellRuntime(executable, major, minor, patch, edition)
+
+
+def _probe_capabilities(runtime: PowerShellRuntime) -> PowerShellRuntime:
     runtime.probe_utf8_output()
     runtime.probe_network_cmdlets()
     return runtime
 
 
+def _inspect_candidate(executable: str, name: str) -> PowerShellRuntime:
+    """兼容既有内部调用：检查版本并执行能力探针。"""
+
+    return _probe_capabilities(_inspect_version(executable, name))
+
+
 def _discover() -> PowerShellRuntime:
     if os.name != "nt":
         raise NetworkStateError("PowerShell 运行时仅支持 Windows")
-    candidates = [
-        (name, executable)
-        for name in ("pwsh.exe", "powershell.exe")
-        for executable in _candidate_paths(name)
-    ]
-    if not candidates:
+    pwsh_candidates = _candidate_paths("pwsh.exe")
+    windows_candidates = _candidate_paths("powershell.exe")
+    if not pwsh_candidates and not windows_candidates:
         raise NetworkStateError(
             "未找到受支持的 PowerShell 运行时；请安装 PowerShell 7（pwsh.exe）"
             "或启用 Windows PowerShell 5.1（powershell.exe）"
         )
 
     failures: list[str] = []
-    runtime: PowerShellRuntime | None = None
-    for name, executable in candidates:
+    pwsh_runtimes: list[PowerShellRuntime] = []
+    for executable in pwsh_candidates:
         try:
-            runtime = _inspect_candidate(executable, name)
-            break
+            pwsh_runtimes.append(_inspect_version(executable, "pwsh.exe"))
         except NetworkStateError as exc:
             failures.append(f"{executable}: {exc}")
             LOGGER.warning(
@@ -248,16 +256,54 @@ def _discover() -> PowerShellRuntime:
                 executable,
                 exc,
             )
+    if pwsh_runtimes:
+        latest = max(pwsh_runtimes, key=lambda item: (item.major, item.minor, item.patch))
+        try:
+            runtime = _probe_capabilities(latest)
+        except NetworkStateError as exc:
+            failures.append(f"{latest.executable} ({latest.version}): {exc}")
+            LOGGER.warning(
+                "latest PowerShell runtime capability probe failed; falling back to 5.1 "
+                "executable=%s version=%s reason=%s",
+                latest.executable,
+                latest.version,
+                exc,
+            )
+        else:
+            LOGGER.info(
+                "PowerShell runtime selected executable=%s version=%s edition=%s fallback_5_1=false",
+                runtime.executable,
+                runtime.version,
+                runtime.edition,
+            )
+            return runtime
+
+    runtime: PowerShellRuntime | None = None
+    for executable in windows_candidates:
+        try:
+            candidate = _inspect_version(executable, "powershell.exe")
+            if not candidate.is_windows_powershell_51:
+                raise NetworkStateError(
+                    f"powershell.exe 版本 {candidate.version} 不是 Windows PowerShell 5.1"
+                )
+            runtime = _probe_capabilities(candidate)
+            break
+        except NetworkStateError as exc:
+            failures.append(f"{executable}: {exc}")
+            LOGGER.warning(
+                "Windows PowerShell 5.1 candidate rejected executable=%s reason=%s",
+                executable,
+                exc,
+            )
     if runtime is None:
         raise NetworkStateError(
             "所有 PowerShell 候选均不可用: " + "; ".join(failures)
         )
-    if runtime.is_windows_powershell_51:
-        LOGGER.info(
-            "PowerShell 7 不可用或能力不足，回退到 Windows PowerShell 5.1 "
-            "executable=%s",
-            runtime.executable,
-        )
+    LOGGER.info(
+        "最新 PowerShell 不可用或能力不足，回退到 Windows PowerShell 5.1 "
+        "executable=%s",
+        runtime.executable,
+    )
     LOGGER.info(
         "PowerShell runtime selected executable=%s version=%s edition=%s fallback_5_1=%s",
         runtime.executable,
