@@ -40,6 +40,10 @@ class CoordinatorError(RuntimeError):
         self.exit_code = exit_code
 
 
+class CoordinatorStop(RuntimeError):
+    """父进程收到停止请求后，在子进程安全结束时退出整个程序。"""
+
+
 def run_script(
     script: str,
     args: list[str],
@@ -52,16 +56,17 @@ def run_script(
         raise CoordinatorError(f"脚本不存在: {path}")
     LOGGER.info("子流程开始 script=%s description=%s", script, description)
     process = subprocess.Popen([sys.executable, "-u", str(path), *args], cwd=ROOT)
+    stop_requested = False
     while True:
         try:
             return_code = process.wait()
             break
         except KeyboardInterrupt:
-            LOGGER.info(
-                "子流程收到停止请求，等待其完成清理 script=%s pid=%s",
-                script,
-                process.pid,
-            )
+            if not stop_requested:
+                stop_requested = True
+                LOGGER.warning("已收到停止请求，正在等待子流程安全恢复，请勿重复按键")
+            else:
+                LOGGER.warning("子流程清理期间收到重复停止请求，继续等待安全退出")
     if return_code != 0:
         LOGGER.error("子流程失败 script=%s returncode=%s", script, return_code)
         raise CoordinatorError(
@@ -69,6 +74,8 @@ def run_script(
             exit_code=return_code if propagate_exit_code else 6,
         )
     LOGGER.info("子流程完成 script=%s", script)
+    if stop_requested:
+        raise CoordinatorStop()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -411,7 +418,7 @@ def interactive(config: Config) -> int:
                 return 0
             else:
                 print("无效选择。")
-        except (KeyboardInterrupt, EOFError):
+        except (KeyboardInterrupt, EOFError, CoordinatorStop):
             print("\n已取消，正常退出。")
             LOGGER.info("交互流程由用户取消")
             return 0
@@ -463,6 +470,9 @@ def main(argv: list[str] | None = None) -> int:
             do_extract(config, source)
         if args.dhcp:
             do_dhcp(config)
+        return 0
+    except CoordinatorStop:
+        LOGGER.info("子流程已安全停止，统筹器正常退出")
         return 0
     except (CoordinatorError, ConfigError, ValueError) as exc:
         if not logging_ready:

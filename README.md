@@ -74,7 +74,7 @@ DHCP 选项格式：Option 12 是 UTF-8 主机名；Option 43、61、125 使用 
 
 仅在你拥有授权的实验网或维护网中运行，并使用独立的测试网卡；不要在承载日常办公、生产业务或未知 DHCP 服务的接口上拨号。程序会保存并恢复 IPv4 地址、路由、DNS、DHCP 及网卡指标，运行期间这些设置可能短暂改变；IPv6 不在恢复范围内。
 
-正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/network-recovery.json`、macOS `/Library/Application Support/IPoESimulator/network-recovery.json` 或 Linux `/var/lib/ipoe-simulator/network-recovery.json`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先运行手动恢复命令，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
+正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。首次中断会立即提示正在安全恢复；此后程序依次发送 DHCP Release、恢复并校验网卡、删除通过校验的 journal，然后直接退出。重复中断只显示当前阶段且不会重入清理。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/network-recovery.json`、macOS `/Library/Application Support/IPoESimulator/network-recovery.json` 或 Linux `/var/lib/ipoe-simulator/network-recovery.json`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先运行手动恢复命令，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
 
 PCAP、日志和恢复日志可能包含 MAC、IP、接口名称、厂商标识及运营商专有字段。共享前请脱敏并限制文件权限；不要提交到公开仓库。抓包或拨号失败时应保留脱敏后的错误上下文和退出码，避免公开原始报文、完整配置或凭据。
 
@@ -111,7 +111,7 @@ Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧�
 
 Python 3.9 已结束上游安全维护；项目只承诺应用代码兼容，不承诺 Python 3.9 解释器的安全维护。源码支持矩阵与 Windows 自动安装的固定运行时相互独立：Windows Release 仍提供 x86、x64、ARM64 三个附件，首次启动未找到匹配的 Python 时下载并校验 Python 3.14.6 与 Scapy 2.7.0。
 
-- Windows 要求管理员权限，优先使用 PowerShell 7（`pwsh.exe`）；未安装、启动失败、版本不兼容、UTF-8 输出或所需网络管理命令能力不完整时，自动尝试其他 PowerShell 7 候选并回退到 Windows PowerShell 5.1（`powershell.exe`）。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
+- Windows 要求管理员权限。程序枚举并去重已安装的 `pwsh.exe`，按语义版本选择最高版本，只对该版本验证 UTF-8 输出和所需网络管理命令；启动或能力探针失败时直接回退 Windows PowerShell 5.1（`powershell.exe`），不会尝试较旧的 `pwsh.exe`。PowerShell 6.x 尽力兼容但不属于主要实机矩阵；能力不足时同样自动回退 5.1。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
 - macOS/Linux 要求 `sudo/root`，程序不会自动提权。
 - macOS 26 不应被视为自带 Python。运行源码前须通过 Command Line Tools 或 Python 官方/可信发行版安装 Python 3.9–3.14；若 `python3` 只是不可用的系统 shim 或解释器缺失，启动器会提示安装，不会静默继续。
 - macOS 使用系统网络工具与系统 `libpcap/BPF`。
@@ -242,7 +242,7 @@ run.cmd --config ipoedhcp_config.json --interactive
 run.cmd --restore
 ```
 
-启动器优先选择 PowerShell 7，并兼容回退到 Windows PowerShell 5.1。macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器，或运行 `sudo ./run.sh --restore` 手动恢复。
+启动器优先进入可用的 PowerShell；业务运行时选择最高版本 `pwsh.exe` 并在其能力探针失败时直接回退 Windows PowerShell 5.1。业务进程结束后启动器原样传播退出码且不暂停。macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器，或运行 `sudo ./run.sh --restore` 手动恢复。
 
 ### 恢复命令与自动恢复
 
