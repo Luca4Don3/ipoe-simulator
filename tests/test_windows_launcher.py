@@ -73,7 +73,8 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertIn("存在待恢复 journal，优先安装锁定运行时", content)
         self.assertIn("if ($restoreMode)", content)
         restore_tail = content[content.index("if ($restoreMode)", content.index("$businessScript")):]
-        self.assertLess(restore_tail.index("exit $exitCode"), restore_tail.index("Read-Host"))
+        self.assertNotIn("Read-Host '按 Enter 键关闭窗口'", restore_tail)
+        self.assertTrue(restore_tail.rstrip().endswith("exit $exitCode"))
 
     def test_committed_line_endings_follow_platform_rules(self) -> None:
         attributes = subprocess.run(

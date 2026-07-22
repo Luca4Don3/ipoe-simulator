@@ -11,6 +11,8 @@ from ipoe_simulator.powershell_runtime import (
     PowerShellRuntime,
     _candidate_paths,
     _inspect_candidate,
+    _inspect_version,
+    _probe_capabilities,
     get_powershell_runtime,
 )
 
@@ -36,65 +38,73 @@ class PowerShellRuntimeTests(unittest.TestCase):
         get_powershell_runtime.cache_clear()
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._probe_capabilities")
+    @patch("ipoe_simulator.powershell_runtime._inspect_version")
     @patch("ipoe_simulator.powershell_runtime._candidate_paths")
-    def test_prefers_capable_powershell_7(self, candidates, inspect) -> None:
+    def test_prefers_capable_powershell_7(self, candidates, inspect, probe) -> None:
         candidates.side_effect = lambda name: {
             "pwsh.exe": [r"C:\pwsh.exe"],
             "powershell.exe": [r"C:\powershell.exe"],
         }[name]
-        inspect.return_value = PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core")
+        selected = PowerShellRuntime(r"C:\pwsh.exe", 7, 4, 6, "Core")
+        inspect.return_value = selected
+        probe.return_value = selected
 
         runtime = get_powershell_runtime()
 
         self.assertEqual(runtime.executable, r"C:\pwsh.exe")
         inspect.assert_called_once_with(r"C:\pwsh.exe", "pwsh.exe")
+        probe.assert_called_once_with(selected)
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._probe_capabilities")
+    @patch("ipoe_simulator.powershell_runtime._inspect_version")
     @patch("ipoe_simulator.powershell_runtime._candidate_paths")
-    def test_falls_back_after_each_powershell_7_failure(self, candidates, inspect) -> None:
+    def test_latest_pwsh_failure_falls_directly_back_to_51(
+        self, candidates, inspect, probe
+    ) -> None:
         candidates.side_effect = lambda name: {
-            "pwsh.exe": [
-                r"C:\pwsh-start.exe",
-                r"C:\pwsh-version.exe",
-                r"C:\pwsh-utf8.exe",
-                r"C:\pwsh-network.exe",
-            ],
+            "pwsh.exe": [r"C:\pwsh-6.exe", r"C:\pwsh-7.exe"],
             "powershell.exe": [r"C:\powershell.exe"],
         }[name]
+        pwsh6 = PowerShellRuntime(r"C:\pwsh-6.exe", 6, 2, 7, "Core")
+        pwsh7 = PowerShellRuntime(r"C:\pwsh-7.exe", 7, 6, 0, "Core")
         fallback = PowerShellRuntime(r"C:\powershell.exe", 5, 1, 19041, "Desktop")
-        inspect.side_effect = [
-            NetworkStateError("启动失败"),
-            NetworkStateError("版本信息无效"),
-            NetworkStateError("UTF-8 输出探针失败"),
-            NetworkStateError("网卡 cmdlet 探针返回无效结果"),
-            fallback,
-        ]
+        inspect.side_effect = [pwsh6, pwsh7, fallback]
+        probe.side_effect = [NetworkStateError("UTF-8 输出探针失败"), fallback]
 
         runtime = get_powershell_runtime()
 
         self.assertIs(runtime, fallback)
-        self.assertEqual(inspect.call_count, 5)
+        self.assertEqual(probe.call_args_list, [unittest.mock.call(pwsh7), unittest.mock.call(fallback)])
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
-    @patch("ipoe_simulator.powershell_runtime._inspect_candidate")
+    @patch("ipoe_simulator.powershell_runtime._probe_capabilities", side_effect=lambda runtime: runtime)
+    @patch("ipoe_simulator.powershell_runtime._inspect_version")
     @patch("ipoe_simulator.powershell_runtime._candidate_paths")
-    def test_reports_all_candidate_failures(self, candidates, inspect) -> None:
+    def test_only_powershell_6_is_supported(self, candidates, inspect, _probe) -> None:
+        candidates.side_effect = lambda name: [r"C:\pwsh.exe"] if name == "pwsh.exe" else []
+        inspect.return_value = PowerShellRuntime(r"C:\pwsh.exe", 6, 2, 7, "Core")
+        self.assertEqual(get_powershell_runtime().major, 6)
+
+    @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
+    @patch("ipoe_simulator.powershell_runtime._probe_capabilities")
+    @patch("ipoe_simulator.powershell_runtime._inspect_version")
+    @patch("ipoe_simulator.powershell_runtime._candidate_paths")
+    def test_reports_all_candidate_failures(self, candidates, inspect, probe) -> None:
         candidates.side_effect = lambda name: {
             "pwsh.exe": [r"C:\pwsh.exe"],
             "powershell.exe": [r"C:\powershell.exe"],
         }[name]
-        inspect.side_effect = [
-            NetworkStateError("PowerShell 7 网络能力缺失"),
-            NetworkStateError("最低支持 PowerShell 5.1"),
-        ]
+        pwsh = PowerShellRuntime(r"C:\pwsh.exe", 7, 6, 0, "Core")
+        inspect.side_effect = [pwsh, NetworkStateError("最低支持 PowerShell 5.1")]
+        probe.side_effect = NetworkStateError("PowerShell 7 网络能力缺失")
 
         with self.assertRaises(NetworkStateError) as raised:
             get_powershell_runtime()
 
         message = str(raised.exception)
-        self.assertIn(r"C:\pwsh.exe: PowerShell 7 网络能力缺失", message)
+        self.assertIn(r"C:\pwsh.exe (7.6.0): PowerShell 7 网络能力缺失", message)
         self.assertIn(r"C:\powershell.exe: 最低支持 PowerShell 5.1", message)
 
     @patch("ipoe_simulator.powershell_runtime.os.name", "nt")
@@ -167,17 +177,22 @@ class PowerShellRuntimeTests(unittest.TestCase):
         terminate.assert_called_once_with(process)
 
     @patch("ipoe_simulator.powershell_runtime.os.path.isfile", return_value=True)
+    @patch("ipoe_simulator.powershell_runtime.glob.glob")
     @patch("ipoe_simulator.powershell_runtime.shutil.which", return_value=None)
     @patch.dict(
         "ipoe_simulator.powershell_runtime.os.environ",
         {"LOCALAPPDATA": r"C:\Users\tester\AppData\Local"},
         clear=True,
     )
-    def test_finds_per_user_powershell_7_path(self, _which, _isfile) -> None:
+    def test_finds_per_user_powershell_7_path(
+        self, _which, glob_paths, _isfile
+    ) -> None:
+        expected = r"C:\Users\tester\AppData\Local\Microsoft\PowerShell\7\pwsh.exe"
+        glob_paths.side_effect = lambda pattern: [expected] if "Microsoft" in pattern else []
         candidates = _candidate_paths("pwsh.exe")
         normalized = {path.replace("/", "\\") for path in candidates}
         self.assertIn(
-            r"C:\Users\tester\AppData\Local\Microsoft\PowerShell\7\pwsh.exe",
+            expected,
             normalized,
         )
 

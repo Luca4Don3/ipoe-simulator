@@ -22,6 +22,10 @@ class DhcpError(RuntimeError):
     pass
 
 
+class DhcpStopped(RuntimeError):
+    pass
+
+
 MESSAGE_TYPES = {
     "discover": 1,
     "offer": 2,
@@ -332,9 +336,15 @@ class DhcpClient:
             if not ready.wait(2):
                 raise DhcpError("二层抓包监听器未能启动")
             self.sendp(packet, iface=self.interface.pcap_name, verbose=False)
-            if not received.wait(self.timeout):
-                raise DhcpError(f"等待 {label} 超时 ({self.timeout}s)")
-        except DhcpError:
+            deadline = time.monotonic() + self.timeout
+            while not received.is_set():
+                if self.stop_event.is_set():
+                    raise DhcpStopped(f"等待 {label} 时收到停止请求")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise DhcpError(f"等待 {label} 超时 ({self.timeout}s)")
+                received.wait(min(0.2, remaining))
+        except (DhcpError, DhcpStopped):
             raise
         except Exception as exc:
             raise DhcpError(f"DHCP {label} 交换失败: {exc}") from exc
