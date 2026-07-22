@@ -6,17 +6,17 @@
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-`v0.2.1` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+`v0.5.2` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 下载
 
 普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
 
-- `ipoe-simulator-v0.2.1-windows-x86.zip`
-- `ipoe-simulator-v0.2.1-windows-x64.zip`
-- `ipoe-simulator-v0.2.1-windows-arm64.zip`
+- `ipoe-simulator-v0.5.2-windows-x86.zip`
+- `ipoe-simulator-v0.5.2-windows-x64.zip`
+- `ipoe-simulator-v0.5.2-windows-arm64.zip`
 
-三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。已发布的 `v0.2.1` ZIP 每个只有一个顶层目录，自带匹配架构的 Python 3.11.9 和 Scapy 2.6.1；Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
+三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 GitHub Release 正文只展示当前版本的变更、兼容性和使用提示，完整历史版本说明保留在仓库的 `RELEASE_NOTES.md`；Assets 紧随当前版本说明展示。已发布的 `v0.5.2` ZIP 每个只有一个顶层目录，不预装 Python runtime；首次启动时可下载并校验锁定的 Python 与 Scapy。Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
 
 ## 配置示例
 
