@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       approve_formal_release:
-        description: "已完成目标 Windows 设备实测与敏感信息审计"
+        description: "已完成或明确豁免目标 Windows 设备实测，且已完成敏感信息审计"
         required: true
         type: boolean
         default: false
