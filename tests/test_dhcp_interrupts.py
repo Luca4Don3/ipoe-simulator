@@ -4,11 +4,52 @@ import unittest
 from unittest import mock
 
 import ipoedhcp
-from ipoe_simulator.dhcp_client import DhcpClient, DhcpStopped
+from ipoe_simulator.dhcp_client import DhcpClient, DhcpError, DhcpStopped
 from ipoe_simulator.network_backend import NetworkStateError
 
 
 class DhcpInterruptTests(unittest.TestCase):
+    def make_waiting_client(self) -> tuple[DhcpClient, mock.Mock]:
+        client = object.__new__(DhcpClient)
+        client.stop_event = __import__("threading").Event()
+        client.timeout = 8
+        client.interface = mock.Mock(pcap_name="test-interface")
+        sniffer = mock.Mock(running=False)
+        client.AsyncSniffer = mock.Mock(return_value=sniffer)
+        client.sendp = mock.Mock()
+        return client, sniffer
+
+    def test_sniffer_start_wait_has_five_second_boundary(self) -> None:
+        client, _ = self.make_waiting_client()
+        with mock.patch(
+            "ipoe_simulator.dhcp_client.time.monotonic",
+            side_effect=(10.0, 15.0),
+        ):
+            with self.assertRaisesRegex(DhcpError, "5 秒"):
+                client._exchange(mock.Mock(), {2}, "Offer")
+
+    def test_sniffer_start_wait_responds_to_stop(self) -> None:
+        client, _ = self.make_waiting_client()
+        client.stop_event.set()
+        with self.assertRaisesRegex(DhcpStopped, "监听器启动"):
+            client._exchange(mock.Mock(), {2}, "Offer")
+
+    def test_exchange_retries_within_total_timeout_budget(self) -> None:
+        client, _ = self.make_waiting_client()
+        client.timeout = 30
+
+        def start() -> None:
+            client.AsyncSniffer.call_args.kwargs["started_callback"]()
+
+        client.AsyncSniffer.return_value.start.side_effect = start
+        with mock.patch(
+            "ipoe_simulator.dhcp_client.time.monotonic",
+            side_effect=(0.0, 0.0, 4.0, 12.0, 28.0, 30.0),
+        ):
+            with self.assertRaisesRegex(DhcpError, "30s"):
+                client._exchange(mock.Mock(), {2}, "Offer")
+        self.assertEqual(client.sendp.call_count, 4)
+
     def test_offer_wait_propagates_controlled_stop(self) -> None:
         client = object.__new__(DhcpClient)
         client.stop_event = __import__("threading").Event()

@@ -14,6 +14,20 @@ def _require_windows() -> None:
         raise NetworkStateError("网卡配置仅支持 Windows 10/11")
 
 
+def _normalize_dns_servers(data: dict[str, Any]) -> list[str]:
+    """规范化 dns_servers 字段并返回去重后的有效字符串列表。
+
+    PowerShell ConvertTo-Json 在单元素数组上可能返回标量；不同架构上
+    Get-DnsClientServerAddress 也偶有非字符串元素。统一规范化后用于快照
+    与收敛校验，避免在 ARM64 上因序列化差异陷入虚假循环。
+    """
+    servers = data.get("dns_servers") or []
+    if isinstance(servers, str):
+        servers = [servers]
+    data["dns_servers"] = [str(server) for server in servers if server]
+    return data["dns_servers"]
+
+
 def _run_powershell(script: str, timeout: int = 45, expect_json: bool = False) -> Any:
     _require_windows()
     output = get_powershell_runtime().run(script, timeout=timeout)
@@ -75,13 +89,13 @@ def capture_snapshot(interface_index: int) -> dict[str, Any]:
         raise NetworkStateError("网卡快照内容无效")
     data["addresses"] = data.get("addresses") or []
     data["routes"] = data.get("routes") or []
-    data["dns_servers"] = data.get("dns_servers") or []
     if isinstance(data["addresses"], dict):
         data["addresses"] = [data["addresses"]]
     if isinstance(data["routes"], dict):
         data["routes"] = [data["routes"]]
-    if isinstance(data["dns_servers"], str):
-        data["dns_servers"] = [data["dns_servers"]]
+    _normalize_dns_servers(data)
+    if data.get("dns_mode") == "static" and not data["dns_servers"]:
+        raise NetworkStateError("Windows 网卡快照不一致：静态 DNS 模式没有服务器；已在修改前停止")
     return data
 
 
@@ -219,6 +233,29 @@ def _restore_script(snapshot: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _dns_set_script(snapshot: dict[str, Any]) -> str:
+    """生成仅重设静态 DNS 的轻量脚本，用于收敛期主动重发。
+
+    在 ARM64 Windows 11 上 `Set-DnsClientServerAddress` 与 `Get-DnsClientServerAddress`
+    偶发不同步，单次下发后读取仍返回旧值，导致收敛校验始终失败。这里先
+    `-ResetServerAddresses` 再以原快照 `-ServerAddresses` 重新下发，用两次写
+    操作补充 ARM64 上单次写入不生效的情形。
+    """
+    idx = int(snapshot["interface_index"])
+    servers = [str(server) for server in snapshot.get("dns_servers", []) if server]
+    lines = [
+        "$ErrorActionPreference = 'Stop'",
+        f"$idx = {idx}",
+        "Set-DnsClientServerAddress -InterfaceIndex $idx -ResetServerAddresses -ErrorAction Stop",
+    ]
+    if snapshot.get("dns_mode") == "static" and servers:
+        dns = ",".join(_ps_string(server) for server in servers)
+        lines.append(
+            f"Set-DnsClientServerAddress -InterfaceIndex $idx -ServerAddresses @({dns}) -ErrorAction Stop"
+        )
+    return "\n".join(lines)
+
+
 def _address_set(snapshot: dict[str, Any]) -> set[tuple[str, int]]:
     return {
         (str(item.get("ip_address")), int(item.get("prefix_length", -1)))
@@ -244,11 +281,22 @@ def verify_restored(original: dict[str, Any], current: dict[str, Any], app_ip: s
         errors.append(f"程序配置的地址仍然存在: {app_ip}")
     if original_dhcp != "enabled" and _address_set(original) != _address_set(current):
         errors.append("静态 IPv4 地址未完整恢复")
-    if str(original.get("dns_mode")) == "static":
-        if list(original.get("dns_servers") or []) != list(current.get("dns_servers") or []):
-            errors.append("静态 DNS 未完整恢复")
-    elif str(current.get("dns_mode")) != "automatic":
-        errors.append("DNS 未恢复为自动获取")
+    original_dns_mode = str(original.get("dns_mode"))
+    current_dns_mode = str(current.get("dns_mode"))
+    if original_dns_mode != current_dns_mode:
+        errors.append(f"DNS 模式不一致: 期望 {original_dns_mode}, 实际 {current_dns_mode}")
+    if original_dns_mode == "static":
+        expected = sorted({str(s) for s in (original.get("dns_servers") or []) if s})
+        actual = sorted({str(s) for s in (current.get("dns_servers") or []) if s})
+        if expected != actual:
+            missing = [s for s in expected if s not in set(actual)]
+            extra = [s for s in actual if s not in set(expected)]
+            detail = f"期望 {expected}, 实际 {actual}"
+            if missing:
+                detail += f", 缺失 {missing}"
+            if extra:
+                detail += f", 多余 {extra}"
+            errors.append(f"静态 DNS 未完整恢复: {detail}")
     if str(original.get("automatic_metric", "")).lower() != str(
         current.get("automatic_metric", "")
     ).lower():
@@ -331,6 +379,7 @@ class WindowsNetworkBackend(NetworkBackend):
         self._run_with_budget(_restore_script(snapshot), deadline)
         progress("convergence", "配置写入完成")
         last_errors: list[str] = []
+        dns_redelivered = False
         while True:
             current = self._capture_with_budget(interface.index, deadline)
             last_errors = verify_restored(snapshot, current, app_ip)
@@ -341,6 +390,18 @@ class WindowsNetworkBackend(NetworkBackend):
                 raise NetworkStateError(
                     "Windows 网卡恢复在 30 秒内未收敛: " + "; ".join(last_errors)
                 )
+            # ARM64 PowerShell 上 Set-DnsClientServerAddress 与 Get 不同步时，
+            # 仅剩 DNS 不一致可主动重发一次（先 Reset 再 Set）以推进收敛。
+            if (
+                not dns_redelivered
+                and snapshot.get("dns_mode") == "static"
+                and last_errors
+                and all("静态 DNS" in error for error in last_errors)
+            ):
+                progress("configuration", "重新下发静态 DNS 以推进收敛")
+                self._run_with_budget(_dns_set_script(snapshot), deadline)
+                dns_redelivered = True
+                continue
             progress("convergence", "; ".join(last_errors))
             time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
 
@@ -366,12 +427,10 @@ class WindowsNetworkBackend(NetworkBackend):
             raise NetworkStateError("网卡快照内容无效")
         data["addresses"] = data.get("addresses") or []
         data["routes"] = data.get("routes") or []
-        data["dns_servers"] = data.get("dns_servers") or []
         for key in ("addresses", "routes"):
             if isinstance(data[key], dict):
                 data[key] = [data[key]]
-        if isinstance(data["dns_servers"], str):
-            data["dns_servers"] = [data["dns_servers"]]
+        _normalize_dns_servers(data)
         return data
 
     def verify_restored(

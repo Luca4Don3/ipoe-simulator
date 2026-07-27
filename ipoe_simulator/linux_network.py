@@ -374,6 +374,15 @@ class LinuxNetworkBackend(NetworkBackend):
                 "servers": parse_resolvectl_dns(resolved_output),
             }
         path = self.root / "etc/resolv.conf"
+        if path.is_symlink():
+            try:
+                target = os.readlink(path)
+            except OSError as exc:
+                raise NetworkStateError(f"无法检查 {path} 符号链接: {exc}") from exc
+            raise NetworkStateError(
+                f"{path} 是符号链接（目标 {target}），且 resolvectl 不可用；"
+                "拒绝直接修改由外部 DNS 管理器维护的文件"
+            )
         try:
             content = path.read_bytes()
         except OSError as exc:
@@ -381,8 +390,23 @@ class LinuxNetworkBackend(NetworkBackend):
         return {
             "backend": "resolv.conf",
             "content_base64": base64.b64encode(content).decode("ascii"),
-            "symlink": os.readlink(path) if path.is_symlink() else "",
+            "symlink": "",
         }
+
+    @staticmethod
+    def _write_regular_file_no_follow(path: Path, content: bytes) -> None:
+        flags = os.O_WRONLY | os.O_TRUNC
+        no_follow = getattr(os, "O_NOFOLLOW", 0)
+        if not no_follow:
+            raise NetworkStateError("当前 Linux 不支持 O_NOFOLLOW，拒绝不安全写入 resolv.conf")
+        try:
+            descriptor = os.open(path, flags | no_follow)
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError as exc:
+            raise NetworkStateError(f"无法安全写入 {path}: {exc}") from exc
 
     def capture_snapshot(self, interface: InterfaceInfo) -> dict[str, Any]:
         _require_linux()
@@ -579,10 +603,7 @@ class LinuxNetworkBackend(NetworkBackend):
         content = "".join(f"nameserver {server}\n" for server in servers)
         if not content:
             content = "# IPoE Simulator: DHCP lease did not provide DNS\n"
-        try:
-            path.write_text(content, encoding="ascii")
-        except OSError as exc:
-            raise NetworkStateError(f"无法写入 {path}: {exc}") from exc
+        self._write_regular_file_no_follow(path, content.encode("ascii"))
 
     def apply_lease(
         self,
@@ -652,7 +673,13 @@ class LinuxNetworkBackend(NetworkBackend):
                 str(dns_snapshot["content_base64"]),
                 validate=True,
             )
-            path.write_bytes(content)
+            if expected_link:
+                target = Path(expected_link)
+                if not target.is_absolute():
+                    target = path.parent / target
+                self._write_regular_file_no_follow(target, content)
+            else:
+                self._write_regular_file_no_follow(path, content)
         except (KeyError, ValueError, OSError) as exc:
             raise NetworkStateError(f"无法恢复 {path}: {exc}") from exc
 

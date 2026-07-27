@@ -52,7 +52,16 @@ jobs:
         shell: powershell
         run: |
           $launcher = Join-Path $PWD 'scripts/windows_launcher.ps1'
-          $null = [scriptblock]::Create([IO.File]::ReadAllText($launcher))
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            $launcher,
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -ne 0) {
+            throw ($errors | Out-String)
+          }
           if (-not (Test-Path -LiteralPath (Join-Path $PWD 'run.cmd'))) {
             throw 'run.cmd is missing'
           }
@@ -168,6 +177,10 @@ jobs:
         run: |
           version="$(tr -d '\r\n' < VERSION)"
           tag="v${version}"
+          python scripts/extract_release_notes.py \
+            --version-file VERSION \
+            --notes-file RELEASE_NOTES.md \
+            --output .temp/release/current-release-notes.md
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release ${tag} 已存在；拒绝重复发布。" >&2
             exit 1
@@ -179,4 +192,4 @@ jobs:
             .temp/release/SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
             --title "IPoE Simulator ${tag}" \
-            --notes-file RELEASE_NOTES.md
+            --notes-file .temp/release/current-release-notes.md

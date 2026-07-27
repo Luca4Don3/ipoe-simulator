@@ -28,6 +28,9 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertIn('"%~dp0runtime\\python.exe" -u "%~dp0ipoedhcp.py" %*', content)
         self.assertIn("net session >nul 2>&1", content)
         self.assertIn("唯一正确命令: .\\run.cmd --restore", content)
+        self.assertIn("PowerShell 已选择 executable=%ps_exe%", content)
+        self.assertIn('if /i not "%~1"=="--restore" if not "%exit_code%"=="0" pause', content)
+        self.assertEqual(content.lower().count("pause"), 2)
 
     def test_batch_launcher_logs_before_runtime_discovery(self) -> None:
         content = RUN_CMD.read_text(encoding="utf-8")
@@ -64,6 +67,8 @@ class WindowsLauncherTests(unittest.TestCase):
         for fragment in required_fragments:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, content)
+        self.assertIn("struct.calcsize('P')", content)
+        self.assertNotIn("Read-Host", content)
 
     def test_restore_routes_directly_and_has_strict_arguments(self) -> None:
         content = LAUNCHER.read_text(encoding="utf-8")
@@ -91,6 +96,7 @@ class WindowsLauncherTests(unittest.TestCase):
                 content = path.read_bytes()
                 self.assertIn(b"\r\n", content)
                 self.assertNotIn(b"\n", content.replace(b"\r\n", b""))
+        self.assertTrue(LAUNCHER.read_bytes().startswith(b"\xef\xbb\xbf"))
 
 
 if __name__ == "__main__":

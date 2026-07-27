@@ -6,7 +6,7 @@
 
 本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
 
-`v0.5.2` 的 Windows x86、x64、ARM64 附件已经发布；源码包含对应架构适配，Windows 10/11 三种架构均正式支持。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+最新已发布版本仍为 `v0.5.2`；当前源码版本为待发布的 `v0.5.3`，修复 Windows PowerShell 5.1 启动编码与异常暂停、Linux DNS 文件写入安全，并强化 DHCP 抓包启动等待和恢复校验。Windows CI 与真实 Windows PowerShell 5.1/CMD 复测完成前，不将 `v0.5.3` 表述为已通过 Windows 实机门禁。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
 
 ## 下载
 
@@ -16,7 +16,7 @@
 - `ipoe-simulator-v0.5.2-windows-x64.zip`
 - `ipoe-simulator-v0.5.2-windows-arm64.zip`
 
-三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 GitHub Release 正文只展示当前版本的变更、兼容性和使用提示，完整历史版本说明保留在仓库的 `RELEASE_NOTES.md`；Assets 紧随当前版本说明展示。已发布的 `v0.5.2` ZIP 每个只有一个顶层目录，不预装 Python runtime；首次启动时可下载并校验锁定的 Python 与 Scapy。Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
+以上仍是最新已发布的 `v0.5.2` 附件；不要把当前 `v0.5.3` 源码版本当作已发布附件。三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 GitHub Release 正文只展示当前版本的变更、兼容性和使用提示，完整历史版本说明保留在仓库的 `RELEASE_NOTES.md`；Assets 紧随当前版本说明展示。已发布的 `v0.5.2` ZIP 每个只有一个顶层目录，不预装 Python runtime；首次启动时可下载并校验锁定的 Python 与 Scapy。Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
 
 ## 配置示例
 
@@ -166,7 +166,7 @@ python3 ipoedhcp.py --capture-only 30 --interface 12 --capture-output .temp/stb.
 ```text
 python3 ipoedhcp.py --config ipoedhcp_config.json
 python3 ipoedhcp.py --config ipoedhcp_config.json --mac <mac> --option60 ITV-STB
-python3 ipoedhcp.py --config ipoedhcp_config.json --interface 12 --timeout 8 --log-level INFO
+python3 ipoedhcp.py --config ipoedhcp_config.json --interface 12 --timeout 30 --log-level INFO
 ```
 
 常用参数：
@@ -175,7 +175,7 @@ python3 ipoedhcp.py --config ipoedhcp_config.json --interface 12 --timeout 8 --l
 - `--mac`、`-m`：覆盖配置中的机顶盒 MAC；
 - `--interface`：覆盖配置中的网卡；
 - `--option12`、`--option43`、`--option50`、`--option60`、`--option61`、`--option125`：覆盖 DHCP 选项；
-- `--timeout`：Offer/ACK 等待秒数，默认 8 秒；
+- `--timeout`：每个 Offer/ACK 阶段的总等待秒数，默认 30 秒；等待期间按 4、8、16 秒退避间隔重发请求，且始终受该总预算约束；
 - `--log-level`：选择 `DEBUG` 或 `INFO` 日志级别。
 
 程序启动 DHCP 事务前保存网卡快照，结束时执行恢复和校验。正常停止使用 `Ctrl+C`；DHCP 失败、可处理异常和父进程异常退出均进入恢复流程。

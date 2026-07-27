@@ -1,3 +1,15 @@
+# IPoE Simulator v0.5.3
+
+本修订版修复 Windows PowerShell 5.1 对无 BOM UTF-8 启动脚本的解析失败，并将 Python 架构探针改为兼容的单引号形式。普通启动仅在非零退出时暂停一次并原样返回退出码；正常退出和所有 `--restore` 路径不暂停。`run.cmd` 记录选用的 PowerShell executable，PowerShell 启动器继续记录完整 edition/version。
+
+Linux 仅在可工作的 `resolvectl` 或普通 `/etc/resolv.conf` 场景修改 DNS。其他符号链接在网卡修改前显式失败，普通文件通过 `O_NOFOLLOW` 文件描述符写入；旧 journal 的符号链接快照仍可在目标未变化时恢复，失败会保留 journal。Windows 新快照会拒绝“静态 DNS 且服务器为空”的不一致状态，旧 journal 则尽力恢复并通过模式校验显式失败。Windows 恢复阶段静态 DNS 的收敛比较改为集合无关序，并在仅剩 DNS 不一致时先 `-ResetServerAddresses` 再以原快照 `-ServerAddresses` 重发一次，避免 ARM64 上 `Set-DnsClientServerAddress` 与 `Get-DnsClientServerAddress` 偶发不同步使 `--restore` 陷入虚假收敛循环；不匹配时校验会同时报出期望、实际、缺失与多余的服务器，便于排查。
+
+DHCP sniffer 启动等待扩展为固定 5 秒并响应停止事件；Offer/ACK 默认总等待预算调整为 30 秒，并按 4、8、16 秒退避间隔重发请求。参数提取支持整数和嵌套序列形式的 IPv4，非法整数显式报错。发布 workflow 现在按 `VERSION` 精确提取单版本 Release Notes，标题缺失、重复或正文为空时停止发布。公开 CLI、JSON 配置和 journal schema 保持兼容。
+
+本版本已完成本地离线验证；Windows CI 以及真实 Windows PowerShell 5.1/CMD 的启动失败、正常受控停止和 `--restore` 复测仍是发布前门禁。`release-dependencies.json` 的独立签名方案未在本版本实施；同包公钥不能形成独立信任锚，需后续结合 Release 签名与外部信任链设计。
+
+---
+
 # IPoE Simulator v0.5.2
 
 本修订版改进 Windows 安全停止反馈。首次 `Ctrl+C` 会立即显示“已收到停止请求，正在安全恢复，请勿重复按键”，Offer/ACK 与续租等待会响应停止事件；重复中断会按 DHCP Release、网卡恢复与校验、退出阶段提示且不会重入清理。父统筹进程等待子进程安全结束后直接退出，不返回交互菜单；Windows 启动器不再显示结束暂停。正常安全停止返回 `0`，DHCP/Release 失败返回 `4`，恢复或校验失败返回 `5`。
