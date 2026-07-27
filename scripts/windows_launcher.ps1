@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $Utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
 [Console]::InputEncoding = $Utf8NoBom
 [Console]::OutputEncoding = $Utf8NoBom
@@ -32,7 +32,6 @@ function Stop-Launcher {
 
     Write-LauncherLog -Level ERROR -Message $Message
     [Console]::Error.WriteLine("错误: $Message")
-    [void] (Read-Host '按 Enter 键关闭窗口')
     exit $ExitCode
 }
 
@@ -224,7 +223,7 @@ function Test-PythonCandidate {
     $probe = @'
 import json, platform, struct, sys
 machine = platform.machine().lower()
-bits = struct.calcsize("P") * 8
+bits = struct.calcsize('P') * 8
 if bits == 32:
     architecture = "x86"
 elif machine in ("amd64", "x86_64"):

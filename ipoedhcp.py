@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         parser.add_argument(f"--option{code}")
     parser.add_argument("--config", "-c", default=str(DEFAULT_CONFIG), help="JSON 配置文件")
     parser.add_argument("--capture-output", help="抓包输出路径，默认写入 .temp")
-    parser.add_argument("--timeout", type=_timeout, default=8, help="Offer/ACK 等待秒数（1-300）")
+    parser.add_argument("--timeout", type=_timeout, default=30, help="Offer/ACK 总等待秒数（1-300，默认 30）")
     parser.add_argument("--log-level", choices=LOG_LEVELS, default=None, help="日志级别")
     return parser
 

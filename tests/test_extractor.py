@@ -2,8 +2,18 @@ from __future__ import annotations
 
 import unittest
 
+from ipoe_simulator.extractor import ExtractError, _ipv4
+
 
 class ExtractorTests(unittest.TestCase):
+    def test_ipv4_integer_and_nested_sequence(self) -> None:
+        self.assertEqual(_ipv4(0xC0000201), "192.0.2.1")
+        self.assertEqual(_ipv4([(0xC0000235,)]), "192.0.2.53")
+
+    def test_invalid_ipv4_integer_is_explicit(self) -> None:
+        with self.assertRaisesRegex(ExtractError, "无效 IPv4 整数"):
+            _ipv4(1 << 32)
+
     @unittest.skipUnless(__import__("importlib").util.find_spec("scapy"), "Scapy 未安装")
     def test_broadcast_transaction_is_selected(self) -> None:
         from pathlib import Path

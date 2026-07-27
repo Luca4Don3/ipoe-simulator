@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -98,12 +99,17 @@ def _option_dict(options: list[tuple[Any, Any]]) -> dict[Any, Any]:
     return result
 
 def _ipv4(value: Any) -> str:
+    if isinstance(value, int):
+        try:
+            return str(ipaddress.IPv4Address(value))
+        except ipaddress.AddressValueError as exc:
+            raise ExtractError(f"无效 IPv4 整数: {value}") from exc
     if isinstance(value, str):
         return value
     if isinstance(value, bytes) and len(value) >= 4:
         return ".".join(str(part) for part in value[:4])
     if isinstance(value, (list, tuple)) and value:
-        return str(value[0])
+        return _ipv4(value[0])
     return str(value)
 
 

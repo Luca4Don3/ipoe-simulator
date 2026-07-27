@@ -122,7 +122,7 @@ class DhcpClient:
         interface: InterfaceInfo,
         mac: str,
         option_values: dict[int, str],
-        timeout: int = 8,
+        timeout: int = 30,
     ):
         try:
             from scapy.all import AsyncSniffer, BOOTP, DHCP, Ether, IP, UDP, sendp
@@ -333,17 +333,40 @@ class DhcpClient:
         )
         try:
             sniffer.start()
-            if not ready.wait(2):
-                raise DhcpError("二层抓包监听器未能启动")
+            startup_deadline = time.monotonic() + 5.0
+            while not ready.is_set():
+                if self.stop_event.is_set():
+                    raise DhcpStopped(f"等待 {label} 抓包监听器启动时收到停止请求")
+                remaining = startup_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise DhcpError("二层抓包监听器未能在 5 秒内启动")
+                ready.wait(min(0.2, remaining))
             self.sendp(packet, iface=self.interface.pcap_name, verbose=False)
-            deadline = time.monotonic() + self.timeout
+            started_at = time.monotonic()
+            deadline = started_at + self.timeout
+            retry_interval = 4.0
+            next_retry = started_at + retry_interval
+            attempt = 1
             while not received.is_set():
                 if self.stop_event.is_set():
                     raise DhcpStopped(f"等待 {label} 时收到停止请求")
-                remaining = deadline - time.monotonic()
+                now = time.monotonic()
+                remaining = deadline - now
                 if remaining <= 0:
                     raise DhcpError(f"等待 {label} 超时 ({self.timeout}s)")
-                received.wait(min(0.2, remaining))
+                if now >= next_retry:
+                    attempt += 1
+                    LOGGER.info(
+                        "DHCP %s 未收到响应，重发 attempt=%s elapsed_seconds=%.1f",
+                        label,
+                        attempt,
+                        now - started_at,
+                    )
+                    self.sendp(packet, iface=self.interface.pcap_name, verbose=False)
+                    retry_interval *= 2
+                    next_retry = now + retry_interval
+                wait_for = min(0.2, remaining, max(0.0, next_retry - now))
+                received.wait(wait_for)
         except (DhcpError, DhcpStopped):
             raise
         except Exception as exc:
