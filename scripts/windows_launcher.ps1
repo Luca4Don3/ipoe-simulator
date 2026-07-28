@@ -361,21 +361,9 @@ try {
     Stop-Launcher -Message $_.Exception.Message -ExitCode 5
 }
 
-$bundledPython = Join-Path $RootDirectory 'runtime\python.exe'
-$journalPath = Join-Path $RootDirectory '.temp\network-recovery.json'
-if (
-    $restoreMode -and
-    (Test-Path -LiteralPath $journalPath -PathType Leaf) -and
-    -not (Test-Path -LiteralPath $bundledPython -PathType Leaf)
-) {
-    Write-LauncherLog -Level INFO -Message '存在待恢复 journal，优先安装锁定运行时'
-    try {
-        Install-PythonRuntime -Architecture $requiredArchitecture
-    } catch {
-        Stop-Launcher -Message "Python 运行时自动安装失败: $($_.Exception.Message)" -ExitCode 5
-    }
-}
-
+# restore 与正常启动共用同一 Python 发现逻辑：优先复用系统已安装且
+# 架构/版本匹配的 Python 3.9–3.14，未命中再下载锁定运行时。避免在
+# 环境已有合适 Python 时仍因 --restore 强制下载 embeddable runtime。
 $python = Find-Python -RequiredArchitecture $requiredArchitecture
 if ($null -eq $python) {
     Write-LauncherLog -Level INFO -Message (
