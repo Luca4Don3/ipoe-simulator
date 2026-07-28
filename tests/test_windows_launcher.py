@@ -75,7 +75,9 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertIn("Join-Path $RootDirectory 'ipoedhcp.py'", content)
         self.assertIn("唯一正确命令: .\\run.cmd --restore", content)
         self.assertIn("--restore 仅允许附加 --log-level INFO|DEBUG", content)
-        self.assertIn("存在待恢复 journal，优先安装锁定运行时", content)
+        # restore 路径不再因 journal 存在而绕过 Find-Python 强制下载；与正常启动
+        # 共用同一 Python 发现逻辑，优先复用系统已安装的匹配 Python。
+        self.assertNotIn("存在待恢复 journal，优先安装锁定运行时", content)
         self.assertIn("if ($restoreMode)", content)
         restore_tail = content[content.index("if ($restoreMode)", content.index("$businessScript")):]
         self.assertNotIn("Read-Host '按 Enter 键关闭窗口'", restore_tail)

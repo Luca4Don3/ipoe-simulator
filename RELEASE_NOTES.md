@@ -2,7 +2,7 @@
 
 本修订版修复 Windows PowerShell 5.1 对无 BOM UTF-8 启动脚本的解析失败，并将 Python 架构探针改为兼容的单引号形式。普通启动仅在非零退出时暂停一次并原样返回退出码；正常退出和所有 `--restore` 路径不暂停。`run.cmd` 记录选用的 PowerShell executable，PowerShell 启动器继续记录完整 edition/version。
 
-Linux 仅在可工作的 `resolvectl` 或普通 `/etc/resolv.conf` 场景修改 DNS。其他符号链接在网卡修改前显式失败，普通文件通过 `O_NOFOLLOW` 文件描述符写入；旧 journal 的符号链接快照仍可在目标未变化时恢复，失败会保留 journal。Windows 新快照会拒绝“静态 DNS 且服务器为空”的不一致状态，旧 journal 则尽力恢复并通过模式校验显式失败。Windows 恢复阶段静态 DNS 的收敛比较改为集合无关序，并在仅剩 DNS 不一致时先 `-ResetServerAddresses` 再以原快照 `-ServerAddresses` 重发一次，避免 ARM64 上 `Set-DnsClientServerAddress` 与 `Get-DnsClientServerAddress` 偶发不同步使 `--restore` 陷入虚假收敛循环；不匹配时校验会同时报出期望、实际、缺失与多余的服务器，便于排查。
+Windows 启动器不再在 `--restore` 路径因存在待恢复 journal 而绕过 Python 发现逻辑、强制下载锁定 embeddable runtime；restore 与正常启动共用同一 `Find-Python` 路径，优先复用系统已安装且架构/版本匹配的 Python 3.9–3.14，仅在未命中时才下载锁定运行时，避免在环境已有合适 Python 时仍重复下载。Linux 仅在可工作的 `resolvectl` 或普通 `/etc/resolv.conf` 场景修改 DNS。其他符号链接在网卡修改前显式失败，普通文件通过 `O_NOFOLLOW` 文件描述符写入；旧 journal 的符号链接快照仍可在目标未变化时恢复，失败会保留 journal。Windows 新快照会拒绝“静态 DNS 且服务器为空”的不一致状态，旧 journal 则尽力恢复并通过模式校验显式失败。Windows 恢复阶段静态 DNS 的收敛比较改为集合无关序，并在仅剩 DNS 不一致时先 `-ResetServerAddresses` 再以原快照 `-ServerAddresses` 重发一次，避免 ARM64 上 `Set-DnsClientServerAddress` 与 `Get-DnsClientServerAddress` 偶发不同步使 `--restore` 陷入虚假收敛循环；不匹配时校验会同时报出期望、实际、缺失与多余的服务器，便于排查。
 
 DHCP sniffer 启动等待扩展为固定 5 秒并响应停止事件；Offer/ACK 默认总等待预算调整为 30 秒，并按 4、8、16 秒退避间隔重发请求。参数提取支持整数和嵌套序列形式的 IPv4，非法整数显式报错。发布 workflow 现在按 `VERSION` 精确提取单版本 Release Notes，标题缺失、重复或正文为空时停止发布。公开 CLI、JSON 配置和 journal schema 保持兼容。
 
