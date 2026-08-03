@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import signal
 import subprocess
@@ -132,6 +133,24 @@ def _read_journal(path: Path) -> dict[str, Any]:
         raise NetworkStateError(f"不支持的恢复日志 schema: {schema}")
     if not isinstance(journal.get("snapshot"), dict):
         raise NetworkStateError(f"恢复日志缺少 snapshot: {path}")
+    app_routes = journal.get("app_routes", [])
+    if not isinstance(app_routes, list) or any(not isinstance(item, str) for item in app_routes):
+        raise NetworkStateError(f"恢复日志 app_routes 无效: {path}")
+    if len(app_routes) > 256:
+        raise NetworkStateError(f"恢复日志 app_routes 超过 256 个地址: {path}")
+    try:
+        normalized_routes = [ipaddress.IPv4Address(item) for item in app_routes]
+    except ipaddress.AddressValueError as exc:
+        raise NetworkStateError(f"恢复日志 app_routes 包含非法 IPv4 地址: {path}") from exc
+    if any(
+        item.is_multicast
+        or item.is_unspecified
+        or item.is_loopback
+        or int(item) == 0xFFFFFFFF
+        for item in normalized_routes
+    ):
+        raise NetworkStateError(f"恢复日志 app_routes 包含非单播 IPv4 地址: {path}")
+    journal["app_routes"] = [str(item) for item in normalized_routes]
     return journal
 
 
@@ -224,6 +243,7 @@ def _restore_from_journal_locked(
                 snapshot,
                 journal.get("app_ip"),
                 progress,
+                journal.get("app_routes", []),
             )
     except BaseException as exc:
         attempt["ended_at"] = int(time.time())
@@ -292,6 +312,7 @@ class NetworkTransaction:
     backend: NetworkBackend
     snapshot: dict[str, Any]
     app_ip: str | None = None
+    app_routes: list[str] = field(default_factory=list)
     _watchdog_writer: int | None = field(default=None, repr=False)
     _journal_lock: JournalLock | None = field(default=None, repr=False)
 
@@ -358,6 +379,7 @@ class NetworkTransaction:
                 "owner_pid": os.getpid(),
                 "updated_at": int(time.time()),
                 "app_ip": self.app_ip,
+                "app_routes": self.app_routes,
                 "interface": self.interface.to_dict(),
                 "snapshot": self.snapshot,
                 "total_restore_attempts": 0,
@@ -425,6 +447,7 @@ class NetworkTransaction:
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str] | None = None,
     ) -> None:
         LOGGER.info(
             "事务应用租约 interface_index=%s ip=%s subnet_mask=%s gateway=%s dns_servers=%s",
@@ -435,7 +458,26 @@ class NetworkTransaction:
             ",".join(dns_servers) or "-",
         )
         self.app_ip = ip_address
+        if len(app_routes or []) > 256:
+            raise NetworkStateError("程序静态路由超过 256 个地址")
+        try:
+            addresses = [ipaddress.IPv4Address(item) for item in (app_routes or [])]
+        except ipaddress.AddressValueError as exc:
+            raise NetworkStateError(f"程序静态路由包含非法 IPv4 地址: {exc}") from exc
+        if any(
+            item.is_multicast
+            or item.is_unspecified
+            or item.is_loopback
+            or int(item) == 0xFFFFFFFF
+            for item in addresses
+        ):
+            raise NetworkStateError("程序静态路由包含非单播 IPv4 地址")
+        self.app_routes = list(dict.fromkeys(str(item) for item in addresses))
+        if self.app_routes and not gateway:
+            raise NetworkStateError("DHCP ACK 未提供网关，无法应用单播静态路由")
         self._write("lease_received")
+        LOGGER.info("准备应用单播静态路由 count=%s", len(self.app_routes))
+        LOGGER.debug("单播静态路由 routes=%s", [f"{item}/32" for item in self.app_routes])
         self.backend.apply_lease(
             self.interface,
             self.snapshot,
@@ -443,6 +485,7 @@ class NetworkTransaction:
             subnet_mask,
             gateway,
             dns_servers,
+            self.app_routes,
         )
         self._write("lease_applied")
 

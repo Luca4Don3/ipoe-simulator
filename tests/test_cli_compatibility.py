@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
 
 import coordinator
+import extract_params
 import ipoedhcp
 from ipoe_simulator.profile import OPTION_CODES
 
@@ -58,6 +62,31 @@ class CliCompatibilityTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             coordinator.parser().parse_args(["--all"])
         self.assertEqual(raised.exception.code, 2)
+
+    def test_extract_json_path_is_forwarded_to_generated_command(self) -> None:
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "dial.json"
+            result = {"mac": self.mac, "network": {"unicast_routes": ["198.51.100.10"]}}
+            with mock.patch(
+                "sys.argv",
+                ["extract_params.py", "synthetic.pcap", "--json", str(config_path)],
+            ), mock.patch.object(extract_params, "ensure_scapy"), mock.patch.object(
+                extract_params, "extract_profile", return_value=result
+            ), self.assertLogs("ipoe-simulator.extract", level="INFO") as captured:
+                self.assertEqual(extract_params.main(), 0)
+        command_log = next(line for line in captured.output if "直接运行命令" in line)
+        self.assertIn("--config", command_log)
+        self.assertIn(str(config_path.resolve()), command_log)
+
+    def test_extract_without_json_warns_routes_are_not_forwarded(self) -> None:
+        result = {"mac": self.mac, "network": {"unicast_routes": ["198.51.100.10"]}}
+        with mock.patch(
+            "sys.argv", ["extract_params.py", "synthetic.pcap"]
+        ), mock.patch.object(extract_params, "ensure_scapy"), mock.patch.object(
+            extract_params, "extract_profile", return_value=result
+        ), self.assertLogs("ipoe-simulator.extract", level="WARNING") as captured:
+            self.assertEqual(extract_params.main(), 0)
+        self.assertTrue(any("不会自动进入拨号配置" in line for line in captured.output))
 
 
 if __name__ == "__main__":

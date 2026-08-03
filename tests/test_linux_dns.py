@@ -13,6 +13,7 @@ from ipoe_simulator.linux_network import LinuxNetworkBackend
 from ipoe_simulator.network_backend import NetworkStateError
 
 
+# 合成测试数据：本地管理 MAC 与 RFC 5737 文档保留地址。
 INTERFACE = InterfaceInfo("test0", "test0", "test", "aa:bb:cc:dd:ee:ff", 7)
 
 

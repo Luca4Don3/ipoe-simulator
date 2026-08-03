@@ -301,6 +301,7 @@ class MacOSNetworkBackend(NetworkBackend):
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str],
     ) -> None:
         _require_macos()
         self._validate_identity(interface, snapshot)
@@ -317,6 +318,15 @@ class MacOSNetworkBackend(NetworkBackend):
         )
         dns = dns_servers or ["Empty"]
         self.runner.run(["networksetup", "-setdnsservers", service, *dns])
+        route_args: list[str] = []
+        for address in app_routes:
+            route_args.extend((address, "255.255.255.255", str(gateway)))
+        try:
+            self.runner.run(
+                ["networksetup", "-setadditionalroutes", service, *route_args]
+            )
+        except NetworkStateError as exc:
+            raise NetworkStateError("应用单播静态路由失败") from exc
 
     def restore(
         self,
@@ -383,6 +393,7 @@ class MacOSNetworkBackend(NetworkBackend):
         original: dict[str, Any],
         current: dict[str, Any],
         app_ip: str | None,
+        app_routes: list[str],
     ) -> list[str]:
         errors: list[str] = []
         for field, label in (
@@ -419,6 +430,21 @@ class MacOSNetworkBackend(NetworkBackend):
             [],
         ):
             errors.append("附加路由未完整恢复")
+        original_route_keys = {
+            (str(item.get("destination")), str(item.get("subnet_mask")), str(item.get("gateway")))
+            for item in original.get("additional_routes", [])
+        }
+        if any(
+            str(item.get("destination")) in set(app_routes)
+            and str(item.get("subnet_mask")) == "255.255.255.255"
+            and (
+                str(item.get("destination")),
+                str(item.get("subnet_mask")),
+                str(item.get("gateway")),
+            ) not in original_route_keys
+            for item in current.get("additional_routes", [])
+        ):
+            errors.append("程序配置的静态路由仍然存在")
         current_ips = {
             item["ip_address"] for item in current.get("addresses", [])
         }

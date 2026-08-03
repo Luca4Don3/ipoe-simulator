@@ -44,12 +44,18 @@ def main() -> int:
         ensure_scapy(auto_install=True)
         result = extract_profile(args.pcap, args.stb_mac)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+        if "unicast_routes" not in (result.get("network") or {}):
+            LOGGER.warning("抓包中未检测到明文 ChannelList；保留配置中的现有单播路由")
         if config is not None:
             config.merge_extracted(result, args.pcap)
             config.save()
             LOGGER.info("配置已保存 path=%s", config.path)
+        elif (result.get("network") or {}).get("unicast_routes"):
+            LOGGER.warning("已提取单播路由，但未使用 --json；这些路由不会自动进入拨号配置")
 
         command = [sys.executable, str(ROOT / "ipoedhcp.py"), "--mac", result["mac"]]
+        if config is not None:
+            command.extend(("--config", str(config.path)))
         for code in OPTION_CODES:
             key = f"option{code}"
             if result.get(key):

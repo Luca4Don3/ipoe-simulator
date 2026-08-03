@@ -64,5 +64,6 @@ def verify_restored(
     original: dict[str, Any],
     current: dict[str, Any],
     app_ip: str | None,
+    app_routes: list[str] | None = None,
 ) -> list[str]:
-    return get_backend().verify_restored(original, current, app_ip)
+    return get_backend().verify_restored(original, current, app_ip, app_routes or [])
