@@ -613,6 +613,7 @@ class LinuxNetworkBackend(NetworkBackend):
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str],
     ) -> None:
         _require_linux()
         self._validate_identity(interface, snapshot)
@@ -642,6 +643,23 @@ class LinuxNetworkBackend(NetworkBackend):
                     interface.name,
                 ]
             )
+        for address in app_routes:
+            try:
+                self.runner.run(
+                    [
+                        "ip",
+                        "-4",
+                        "route",
+                        "replace",
+                        f"{address}/32",
+                        "via",
+                        str(gateway),
+                        "dev",
+                        interface.name,
+                    ]
+                )
+            except NetworkStateError as exc:
+                raise NetworkStateError("应用单播静态路由失败") from exc
         self._apply_dns(interface, snapshot["dns"], dns_servers)
 
     def _restore_dns(
@@ -750,10 +768,19 @@ class LinuxNetworkBackend(NetworkBackend):
         }
 
     @staticmethod
-    def _route_set(snapshot: dict[str, Any]) -> set[tuple[str, str, int, str]]:
+    def _route_destination(value: Any) -> str:
+        destination = str(value or "")
+        try:
+            network = ipaddress.IPv4Network(destination, strict=False)
+        except (ipaddress.AddressValueError, ipaddress.NetmaskValueError):
+            return destination
+        return str(network.network_address) if network.prefixlen == 32 else str(network)
+
+    @classmethod
+    def _route_set(cls, snapshot: dict[str, Any]) -> set[tuple[str, str, int, str]]:
         return {
             (
-                str(item.get("destination") or ""),
+                cls._route_destination(item.get("destination")),
                 str(item.get("gateway") or ""),
                 int(item.get("metric") or 0),
                 str(item.get("table") or "main"),
@@ -771,6 +798,7 @@ class LinuxNetworkBackend(NetworkBackend):
         original: dict[str, Any],
         current: dict[str, Any],
         app_ip: str | None,
+        app_routes: list[str],
     ) -> list[str]:
         errors: list[str] = []
         if original.get("manager", {}).get("type") != current.get("manager", {}).get(
@@ -831,4 +859,17 @@ class LinuxNetworkBackend(NetworkBackend):
             current.get("link", {}).get("up")
         ):
             errors.append("接口启用状态未恢复")
+        original_routes = self._route_set(original)
+        app_destinations = set(app_routes)
+        if any(
+            self._route_destination(item.get("destination")) in app_destinations
+            and (
+                self._route_destination(item.get("destination")),
+                str(item.get("gateway") or ""),
+                int(item.get("metric") or 0),
+                str(item.get("table") or "main"),
+            ) not in original_routes
+            for item in current.get("routes", [])
+        ):
+            errors.append("程序配置的静态路由仍然存在")
         return errors

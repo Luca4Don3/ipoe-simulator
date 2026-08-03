@@ -8,6 +8,7 @@ from ipoe_simulator.windows_network import _restore_script, capture_snapshot, ve
 
 
 class NetworkStateTests(unittest.TestCase):
+    # 本文件中的合法 IP/MAC 均为 RFC 5737 文档保留地址或本地管理 MAC。
     def test_capture_rejects_static_dns_without_servers(self) -> None:
         snapshot = {
             "interface_index": 7,
@@ -131,9 +132,10 @@ class NetworkStateTests(unittest.TestCase):
             "addresses": [],
             "routes": [],
             "dns_mode": "static",
-            "dns_servers": ["8.8.8.8", "1.1.1.1"],
+            # 合成测试数据：RFC 5737 文档保留地址。
+            "dns_servers": ["192.0.2.53", "198.51.100.53"],
         }
-        current = {**snapshot, "dns_servers": ["1.1.1.1", "8.8.8.8"]}
+        current = {**snapshot, "dns_servers": ["198.51.100.53", "192.0.2.53"]}
         self.assertEqual(verify_restored(snapshot, current, None), [])
 
     def test_static_dns_mismatch_reports_difference(self) -> None:
@@ -143,9 +145,10 @@ class NetworkStateTests(unittest.TestCase):
             "addresses": [],
             "routes": [],
             "dns_mode": "static",
-            "dns_servers": ["8.8.8.8", "1.1.1.1"],
+            # 合成测试数据：RFC 5737 文档保留地址。
+            "dns_servers": ["192.0.2.53", "198.51.100.53"],
         }
-        current = {**snapshot, "dns_servers": ["8.8.4.4"]}
+        current = {**snapshot, "dns_servers": ["203.0.113.53"]}
         errors = verify_restored(snapshot, current, None)
         self.assertTrue(any("静态 DNS 未完整恢复" in error for error in errors))
         detail = next(error for error in errors if "静态 DNS" in error)
@@ -166,12 +169,13 @@ class NetworkStateTests(unittest.TestCase):
             "addresses": [],
             "routes": [],
             "dns_mode": "static",
-            "dns_servers": ["8.8.8.8"],
+            # 合成测试数据：RFC 5737 文档保留地址。
+            "dns_servers": ["192.0.2.53"],
         }
         iface = InterfaceInfo(pcap_name="eth", name="eth", description="eth", mac="aa:bb:cc:dd:ee:ff", index=7)
         states = [
             {**snapshot, "dns_servers": []},
-            {**snapshot, "dns_servers": ["8.8.8.8"]},
+            {**snapshot, "dns_servers": ["192.0.2.53"]},
         ]
         calls: list[str] = []
 

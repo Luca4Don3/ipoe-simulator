@@ -18,7 +18,8 @@
   "network": {
     "subnet_mask": "",
     "gateway": "",
-    "dns": []
+    "dns": [],
+    "unicast_routes": ["<ipv4>"]
   },
   "behavior": {
     "auto_renew": true,
