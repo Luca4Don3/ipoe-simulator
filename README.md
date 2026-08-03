@@ -6,7 +6,7 @@ IPoE Simulator 是面向授权实验网和维护网的 DHCPv4/IPoE CLI 工具，
 
 当前源码版本为待发布的 `v0.6.0`，最新正式发布版本仍为 `v0.5.2`。`v0.6.0` 增加从明文 ChannelList 提取单播控制端点，并在租约期间按 DHCP ACK 网关配置临时主机路由的能力。Windows CI、真实网卡和三架构门禁完成前，不应把当前源码描述为已经发布或通过实机验收。
 
-项目采用 GPL-3.0-only，详见 `LICENSE`。工具不会修改 IPv6，不提供 IPTV 播放、实时 EPG 登录、GUI、开机服务或断电恢复服务。
+项目采用 GPL-2.0-only，完整条款见 `LICENSE`。工具不会修改 IPv6，不提供 IPTV 播放、实时 EPG 登录、GUI、开机服务或断电恢复服务。
 
 ## 快速开始
 
@@ -134,11 +134,11 @@ Windows 使用 `run.cmd --restore`，macOS/Linux 使用 `sudo ./run.sh --restore
 
 PCAP、配置、日志和 journal 可能包含 MAC、IP、接口名称、主机名、厂商标识及运营商字段。不要将真实文件提交到公开仓库；分享前应脱敏并限制权限。INFO 日志只记录单播路由数量，DEBUG 日志可能包含具体端点。
 
-Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统网络工具与 `libpcap/BPF`；Linux 使用系统网络工具、PF_PACKET 和 `tcpdump`。这些属于运行环境，不是本项目分发的开源依赖。操作系统断电、内核或网络管理器异常可能超出进程内恢复能力。
+Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统网络工具与 `libpcap/BPF`；Linux 使用系统网络工具、PF_PACKET 和 `tcpdump`。Npcap 不随项目分发，是受其独立许可条款约束的外部运行依赖；其他列出的系统组件同样属于运行环境，不是本项目分发的开源依赖。操作系统断电、内核或网络管理器异常可能超出进程内恢复能力。
 
 ## 致谢
 
 本项目感谢以下实际使用的开源工具：
 
-- **Python**：作为项目运行时并提供标准库；来源为 [Python Software Foundation](https://www.python.org/psf/)，采用 [PSF License](https://docs.python.org/3/license.html)。
-- **Scapy**：用于 DHCP、二层报文收发以及 PCAP/PCAPNG 读写；来源为 [Scapy 项目（secdev/scapy）](https://github.com/secdev/scapy)，采用 [GPL-2.0-only](https://github.com/secdev/scapy/blob/master/LICENSE)。
+- **Python**：作为项目运行时并提供标准库；来源为 [Python Software Foundation](https://www.python.org/psf/)，采用 [Python Software Foundation License Version 2（PSF License）](https://docs.python.org/3/license.html)。
+- **Scapy**：用于 DHCP、二层报文收发以及 PCAP/PCAPNG 读写；来源为 [Scapy 项目（secdev/scapy）](https://github.com/secdev/scapy)，采用 [GPL-2.0-only](https://github.com/secdev/scapy/blob/master/LICENSE)，完整上游许可证文本见 `licenses/SCAPY-LICENSE.txt`。
