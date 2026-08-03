@@ -1,15 +1,24 @@
-IPoE Simulator portable Windows packages include:
+IPoE Simulator runtime components and dependency notices:
 
 Python 3.14.6
 Copyright (c) 2001-2026 Python Software Foundation.
 Python is distributed under the Python Software Foundation License Version 2.
-The complete license is included at runtime/LICENSE.txt in each package.
+When the Windows launcher installs the locked Python runtime, its complete
+license is available at runtime/LICENSE.txt.
 https://www.python.org/
 
 Scapy 2.7.0
 Copyright (C) Philippe Biondi and the Scapy project contributors.
 Scapy is distributed under GPL-2.0-only.
-The license notice is included in licenses/SCAPY-LICENSE.txt.
+The complete upstream license text is included in licenses/SCAPY-LICENSE.txt.
 https://scapy.net/
 
-IPoE Simulator project source is licensed under GPL-3.0-only; see LICENSE.
+IPoE Simulator project source is licensed under GPL-2.0-only; see LICENSE.
+
+External runtime dependency (not distributed with this project):
+
+Npcap
+Npcap is required on Windows for packet capture and injection. It is not
+included in this project's source or release packages and remains subject
+to its own license terms.
+https://npcap.com/

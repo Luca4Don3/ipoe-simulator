@@ -1,3 +1,15 @@
+# IPoE Simulator v0.6.0
+
+本次向后兼容的 MINOR 更新新增 ChannelList 单播静态路由。`extract_params.py` 可在所选机顶盒 MAC 的 TCP 流中有界重组非标准端口 HTTP，解析 `Content-Length`、chunked、identity 与 gzip 响应，并从明文 `Authentication.CTCSetConfig('Channel', ...)` 提取、过滤、去重最多 256 个 IPv4 单播控制端点。未检测到 ChannelList 时保留旧列表；检测到但解析不完整时原子失败；成功解析时整体替换 `network.unicast_routes`，包括合法空列表。
+
+首次 DHCP ACK 后，Windows 通过临时 `ActiveStore`、Linux 通过 `ip route replace`、macOS 通过 network service additional routes 配置经 ACK 网关转发的 `/32` 路由。存在路由但 ACK 无网关或任一路由应用失败时立即进入事务恢复。schema v2 journal 新增可选 `app_routes`，并在应用前持久化；正常退出、失败恢复、watchdog 和手动恢复均还原原路由快照并检查程序静态路由无残留。INFO 仅记录数量，具体端点限 DEBUG。
+
+PCAP、配置和 DEBUG 日志可能包含运营商控制地址。该功能仅处理明文 ChannelList，不解密 TLS、不登录实时 EPG，也不扫描其他 HTTP 地址。当前版本不得表述为已发布；真实 Windows 10/11 网卡及 x86/x64/ARM64 验收仍是发布前门禁。
+
+项目许可证从 GPL-3.0-only 调整为 GPL-2.0-only，根目录 `LICENSE` 已替换为完整 GNU GPL v2 文本。发布附件同步携带项目许可证、第三方声明和 Scapy 2.7.0 的完整上游 GPL-2.0 许可证文本。Python 运行时采用 PSF License；Npcap 不随项目分发，是受独立许可条款约束的外部运行依赖。本次调整不改变 CLI、`network.unicast_routes`、journal v2 `app_routes` 或三平台网络接口。
+
+---
+
 # IPoE Simulator v0.5.3
 
 本修订版修复 Windows PowerShell 5.1 对无 BOM UTF-8 启动脚本的解析失败，并将 Python 架构探针改为兼容的单引号形式。普通启动仅在非零退出时暂停一次并原样返回退出码；正常退出和所有 `--restore` 路径不暂停。`run.cmd` 记录选用的 PowerShell executable，PowerShell 启动器继续记录完整 edition/version。
@@ -72,7 +84,7 @@ macOS 26 不宣称自带 Python。源码运行前必须通过 Command Line Tools
 
 # IPoE Simulator v0.2.1
 
-本版本补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，许可证仍为 GPL-3.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
+本版本当时补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，当时许可证为 GPL-3.0-only；项目自 v0.6.0 源码起改为 GPL-2.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
 
 普通用户请下载与 Windows 原生架构匹配的平台附件：
 

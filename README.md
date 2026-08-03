@@ -1,28 +1,36 @@
 # IPoE Simulator
 
-正式支持 Windows 10/11 x86、x64 和 ARM64 的 IPoE DHCP 模拟器；macOS 和 Linux 仅完成代码适配，不发布平台附件。
+IPoE Simulator 是面向授权实验网和维护网的 DHCPv4/IPoE CLI 工具，可替代机顶盒完成接入测试、DHCP 参数验证和故障排查。Windows 10/11 x86、x64、ARM64 是正式支持目标；macOS 和 Linux 仅完成源码适配与离线验证，不提供发布附件。
 
-这是一个纯 CLI 的 DHCPv4/IPoE 模拟器。Windows 是第一优先级平台；当前源码同时实现了 macOS 与 Linux 网卡事务后端。CLI 参数、JSON 配置和 DHCP 状态机保持兼容。项目源码采用 GPL-3.0-only，详见 `LICENSE`。
+> 声明：本项目的测试环境均基于浙江电信网络环境；其他地区或运营商环境可能存在差异，使用前请结合实际网络配置进行验证。
 
-本项目旨在为电信 iTV 接口的 IPoE 接入测试提供一个可重复的 DHCPv4 模拟工具，便于在实验和维护环境中验证接入流程、DHCP 参数及网卡状态恢复行为。可替代机顶盒进行接入测试、故障排查、DHCP 参数验证及现场维护。
+当前源码版本为待发布的 `v0.6.0`，最新正式发布版本仍为 `v0.5.2`。`v0.6.0` 增加从明文 ChannelList 提取单播控制端点，并在租约期间按 DHCP ACK 网关配置临时主机路由的能力。Windows CI、真实网卡和三架构门禁完成前，不应把当前源码描述为已经发布或通过实机验收。
 
-最新已发布版本仍为 `v0.5.2`；当前源码版本为待发布的 `v0.5.3`，修复 Windows PowerShell 5.1 启动编码与异常暂停、Linux DNS 文件写入安全，并强化 DHCP 抓包启动等待和恢复校验。Windows CI 与真实 Windows PowerShell 5.1/CMD 复测完成前，不将 `v0.5.3` 表述为已通过 Windows 实机门禁。macOS 与 Linux 尚未进行实机测试，目前仅完成代码层面的平台后端实现与离线验证。本项目不会修改 IPv6，不提供 GUI、开机服务、整机断电时运行的恢复服务或 IPTV 播放能力。
+项目采用 GPL-2.0-only，完整条款见 `LICENSE`。工具不会修改 IPv6，不提供 IPTV 播放、实时 EPG 登录、GUI、开机服务或断电恢复服务。
 
-## 下载
+## 快速开始
 
-普通用户请从 GitHub Release 下载与 Windows 原生架构匹配的附件：
+源码支持 Python 3.9–3.14，并锁定 Scapy 2.7.0。Windows 要求管理员权限和 Npcap；macOS/Linux 要求 `sudo/root`。先执行只读环境检查：
 
-- `ipoe-simulator-v0.5.2-windows-x86.zip`
-- `ipoe-simulator-v0.5.2-windows-x64.zip`
-- `ipoe-simulator-v0.5.2-windows-arm64.zip`
+```text
+python3 check_env.py
+python3 check_env.py --json
+```
 
-以上仍是最新已发布的 `v0.5.2` 附件；不要把当前 `v0.5.3` 源码版本当作已发布附件。三个架构附件位于同一个版本 Release，使用同一份 `SHA256SUMS.txt` 校验。每个 GitHub Release 正文只展示当前版本的变更、兼容性和使用提示，完整历史版本说明保留在仓库的 `RELEASE_NOTES.md`；Assets 紧随当前版本说明展示。已发布的 `v0.5.2` ZIP 每个只有一个顶层目录，不预装 Python runtime；首次启动时可下载并校验锁定的 Python 与 Scapy。Npcap 不随包分发，安装前同时校验 SHA-256、Authenticode 状态及发布者。GitHub 自动生成的源码归档仅供开发者使用，不包含便携运行时。
+普通 Windows 用户应从 GitHub Release 下载与原生架构匹配的 `v0.5.2` 附件，并核对 `SHA256SUMS.txt`。源码运行的基本流程是：
 
-## 配置示例
+```text
+python3 ipoedhcp.py --list-interfaces
+python3 ipoedhcp.py --capture-only 30 --interface <interface> --capture-output .temp/stb.pcap
+python3 extract_params.py .temp/stb.pcap --json ipoedhcp_config.json
+python3 ipoedhcp.py --config ipoedhcp_config.json
+```
 
-`config.example.json` 是现有配置结构的参考。复制后请替换所有占位符；不要把占位符直接用于真实拨号。
+Windows 可运行 `run.cmd`，macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器。每个平台和架构必须使用匹配的 Python；程序会显式拒绝不支持的版本或架构组合。
 
-最小配置（只指定接口和机顶盒 MAC）：
+## 配置
+
+复制 `config.example.json` 后替换占位符。最小配置为：
 
 ```json
 {
@@ -33,7 +41,7 @@
 }
 ```
 
-通用 iTV 完整配置示例（Option 值必须来自你的授权抓包或运营商提供的测试资料）：
+常用完整结构为：
 
 ```json
 {
@@ -49,14 +57,11 @@
     "option61": "<option61_hex>",
     "option125": "<option125_hex>"
   },
-  "capture": {
-    "pcap_file": ".temp/<capture>.pcap",
-    "duration": 30
-  },
   "network": {
     "subnet_mask": "",
     "gateway": "",
-    "dns": []
+    "dns": [],
+    "unicast_routes": ["<ipv4>"]
   },
   "behavior": {
     "auto_renew": true,
@@ -68,226 +73,72 @@
 }
 ```
 
-DHCP 选项格式：Option 12 是 UTF-8 主机名；Option 43、61、125 使用 `0x` 开头的连续十六进制字节串；Option 50 是 IPv4 地址（或 `0x` 加 4 个字节）；Option 60 是 UTF-8 厂商类字符串。未使用的选项留空。选项内容通常来自授权网络中机顶盒的 DHCP Discover/Request 抓包，优先使用 `extract_params.py` 提取并人工复核；不要猜测、拼接或照搬其他用户的标识。Option 43/125 的内部 TLV 和厂商编码没有通用标准，必须按实际网络资料解释。
+Option 12/60 是字符串；Option 43/61/125 使用 `0x` 开头的连续十六进制字节；Option 50 是 IPv4 或 4 字节十六进制值。参数应来自你有权使用的抓包或测试资料，不要猜测或复用他人的标识。
 
-## 安全使用与失败处理
+`network.unicast_routes` 最多包含 256 个规范化 IPv4 单播地址。只填写地址，不填写 CIDR、网关或 metric。程序在首次 DHCP ACK 后通过 ACK 网关应用对应主机路由；旧配置缺少该字段时等价于空数组。存在单播路由但 ACK 没有网关时，拨号会显式失败并进入恢复。
 
-仅在你拥有授权的实验网或维护网中运行，并使用独立的测试网卡；不要在承载日常办公、生产业务或未知 DHCP 服务的接口上拨号。程序会保存并恢复 IPv4 地址、路由、DNS、DHCP 及网卡指标，运行期间这些设置可能短暂改变；IPv6 不在恢复范围内。
+## 常用操作
 
-正常停止请使用 `Ctrl+C` 或程序的 Stop 流程。首次中断会立即提示正在安全恢复；此后程序依次发送 DHCP Release、恢复并校验网卡、删除通过校验的 journal，然后直接退出。重复中断只显示当前阶段且不会重入清理。DHCP 失败、可处理异常和父进程异常会触发恢复；恢复日志位于 Windows 项目 `.temp/network-recovery.json`、macOS `/Library/Application Support/IPoESimulator/network-recovery.json` 或 Linux `/var/lib/ipoe-simulator/network-recovery.json`。若日志显示 `restore_failed`，保留日志和接口现场，勿反复强行拨号；先检查权限、接口是否仍存在及网络管理器状态，再按日志重试恢复。整机断电不保证执行进程内恢复，重启后应先运行手动恢复命令，并人工核对 IPv4、路由、DNS 和 DHCP 状态。
-
-PCAP、日志和恢复日志可能包含 MAC、IP、接口名称、厂商标识及运营商专有字段。共享前请脱敏并限制文件权限；不要提交到公开仓库。抓包或拨号失败时应保留脱敏后的错误上下文和退出码，避免公开原始报文、完整配置或凭据。
-
-## 代码适配范围
-
-- Windows 10 x86（正式支持）；
-- Windows 10/11 x64（正式支持）；
-- Windows 10/11 ARM64（正式支持）；
-- macOS 14、15、26，Intel x86_64 与 Apple Silicon；
-- Linux 为未交付 runtime、未实机验证的适配目标。
-
-遗留 Linux 只支持 x86_64，必须使用 `/opt/ipoe-simulator/runtime` 内随部署包提供的 Python 3.11 + Scapy。现代 Linux 支持 x86_64 和 aarch64。源码仓库不包含跨发行版 Python 二进制包；缺少指定 runtime 时程序会显式失败，不会退回系统旧版 Python。
-
-## 平台后端
-
-Windows 使用 PowerShell NetTCPIP/DNS cmdlet 和 Npcap，保存并恢复 IPv4 地址、路由、DNS、DHCP、AutomaticMetric 和 InterfaceMetric。
-
-macOS 使用系统 `networksetup`、`ifconfig`、`route` 与 `libpcap/BPF`，保存并恢复 network service 的启用状态、DHCP/手动模式、IPv4、网关、DNS 和附加路由。
-
-Linux 使用 Scapy PF_PACKET 和 `iproute2`，同时兼容现代 `ip -j` 与旧版 `ip -o` 输出。支持：
-
-- NetworkManager；
-- systemd-networkd；
-- ifupdown；
-- RHEL/CentOS sysconfig；
-- SLES/openSUSE sysconfig；
-- 未托管静态接口。
-
-如果接口带动态地址但无法归属到已支持的管理器，或者发现未知动态管理进程，程序会在修改前失败。依赖检测可识别 `yum`、`dnf`、`apt-get`、`zypper` 和 `pacman`，只安装 `iproute2/iproute` 与 `tcpdump` 等基础依赖，不会安装或替换网络管理器。仓库失效时保留包管理器原始错误并退出。
-
-## 权限与依赖
-
-源码正式支持 Python 3.9、3.10、3.11、3.12、3.13 和 3.14，并锁定 Scapy 2.7.0。Python 3.8 及更低版本、Python 3.15 及更高版本会显式失败。`release-dependencies.json` 记录 Windows 便携 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256；打包与运行时安装均只接受该清单，已安装的 Scapy 版本不匹配也会失败。
-
-Python 3.9 已结束上游安全维护；项目只承诺应用代码兼容，不承诺 Python 3.9 解释器的安全维护。源码支持矩阵与 Windows 自动安装的固定运行时相互独立：Windows Release 仍提供 x86、x64、ARM64 三个附件，首次启动未找到匹配的 Python 时下载并校验 Python 3.14.6 与 Scapy 2.7.0。
-
-- Windows 要求管理员权限。程序枚举并去重已安装的 `pwsh.exe`，按语义版本选择最高版本，只对该版本验证 UTF-8 输出和所需网络管理命令；启动或能力探针失败时直接回退 Windows PowerShell 5.1（`powershell.exe`），不会尝试较旧的 `pwsh.exe`。PowerShell 6.x 尽力兼容但不属于主要实机矩阵；能力不足时同样自动回退 5.1。两者都必须以管理员身份运行。运行时可自动安装 Scapy，并在 Npcap 缺失时从官方地址下载、使用已选择的 PowerShell 校验 Authenticode 签名后静默安装。
-- macOS/Linux 要求 `sudo/root`，程序不会自动提权。
-- macOS 26 不应被视为自带 Python。运行源码前须通过 Command Line Tools 或 Python 官方/可信发行版安装 Python 3.9–3.14；若 `python3` 只是不可用的系统 shim 或解释器缺失，启动器会提示安装，不会静默继续。
-- macOS 使用系统网络工具与系统 `libpcap/BPF`。
-- Linux 使用 PF_PACKET；过滤器编译依赖 `tcpdump`。
-
-每个平台和架构必须使用匹配的 Python 解释器。程序会拒绝在 x64/ARM64 Windows 上用 32 位 Python 执行拨号。
-
-先执行只读环境检测：
-
-```text
-python3 check_env.py
-python3 check_env.py --json
-```
-
-所有平台的环境检测均不会安装依赖，也不会修改网卡；抓包或拨号才会安装已锁定依赖。
-
-## 使用
-
-项目提供环境检测、抓包、参数提取、直接拨号、手动恢复和统筹器六类命令。所有命令均在项目根目录执行；Windows 运行网络事务时使用管理员权限。
-
-### 环境检测
-
-环境检测执行只读检查，覆盖 Python、Scapy、权限、平台、架构和网络依赖：
-
-```text
-python3 check_env.py
-python3 check_env.py --json
-```
-
-`--json` 以 JSON 输出检测结果，适合脚本和 CI 读取。
-
-### 直接使用 `ipoedhcp.py`
-
-列出可用网卡：
-
-```text
-python3 ipoedhcp.py --list-interfaces
-```
-
-`--interface` 支持网卡 GUID、ifIndex、名称或唯一描述。多网卡环境请明确指定网卡。
-
-只抓取 DHCP 报文并保存 PCAP：
-
-```text
-python3 ipoedhcp.py --capture-only 30 --interface 12 --capture-output .temp/stb.pcap
-```
-
-`--capture-only` 的数值单位为秒；省略数值时默认抓包 30 秒。`--capture-output` 指定 PCAP/PCAPNG 输出路径，省略时写入项目 `.temp/` 目录。
-
-使用 JSON 配置启动 IPoE DHCP 模拟：
+直接运行与参数覆盖：
 
 ```text
 python3 ipoedhcp.py --config ipoedhcp_config.json
-python3 ipoedhcp.py --config ipoedhcp_config.json --mac <mac> --option60 ITV-STB
-python3 ipoedhcp.py --config ipoedhcp_config.json --interface 12 --timeout 30 --log-level INFO
+python3 ipoedhcp.py --config ipoedhcp_config.json --mac <mac> --interface <interface>
+python3 ipoedhcp.py --config ipoedhcp_config.json --option60 ITV-STB --timeout 30
 ```
 
-常用参数：
-
-- `--config`、`-c`：JSON 配置路径；
-- `--mac`、`-m`：覆盖配置中的机顶盒 MAC；
-- `--interface`：覆盖配置中的网卡；
-- `--option12`、`--option43`、`--option50`、`--option60`、`--option61`、`--option125`：覆盖 DHCP 选项；
-- `--timeout`：每个 Offer/ACK 阶段的总等待秒数，默认 30 秒；等待期间按 4、8、16 秒退避间隔重发请求，且始终受该总预算约束；
-- `--log-level`：选择 `DEBUG` 或 `INFO` 日志级别。
-
-程序启动 DHCP 事务前保存网卡快照，结束时执行恢复和校验。正常停止使用 `Ctrl+C`；DHCP 失败、可处理异常和父进程异常退出均进入恢复流程。
-
-手动恢复程序默认 journal：
-
-```text
-python3 ipoedhcp.py --restore
-python3 ipoedhcp.py --restore --log-level DEBUG
-```
-
-`--restore` 是独立主操作，不能与抓包、列出接口或拨号主操作组合。它在读取 `ipoedhcp_config.json` 前执行，不读取拨号配置，也不检查、安装或加载 Scapy/Npcap。没有默认 journal 时会明确记录“无待恢复状态”并返回 `0`；存在 journal 时要求 Windows 管理员权限或 macOS/Linux `root/sudo` 权限。journal 损坏、属于其他平台、权限不足、恢复失败或恢复校验失败时返回 `5` 并保留现场。
-
-### 使用 `extract_params.py` 提取参数
-
-从 PCAP 或 PCAPNG 文件提取 DHCP 参数并打印 JSON：
+提取 PCAP/PCAPNG：
 
 ```text
 python3 extract_params.py .temp/stb.pcap
-```
-
-将提取结果合并写入配置文件：
-
-```text
 python3 extract_params.py .temp/stb.pcap --json ipoedhcp_config.json
 python3 extract_params.py .temp/stb.pcap --json ipoedhcp_config.json --stb-mac <mac>
 ```
 
-`--stb-mac` 用于多客户端抓包时选择目标机顶盒。提取完成后可以直接使用生成或更新的 JSON 配置启动拨号。
+使用 `--json` 时，提取结果合并写入指定配置，输出的后续拨号命令也会携带同一路径的 `--config`。不使用 `--json` 时，JSON 结果只打印到控制台；若提取出单播路由，程序会警告它们不会自动进入拨号配置。
 
-### 使用 `coordinator.py` 统筹流程
+ChannelList 处理结果分为：
 
-统筹器可以分步执行抓包、参数提取和 DHCP 模拟：
+- 成功解析：以去重后的合法单播端点整体替换 `unicast_routes`，合法空结果会清空旧列表；
+- 未发现明文 ChannelList：明确警告并保留配置中的旧列表；
+- 检测到但解析不完整、转义损坏、TCP/HTTP 数据不完整或资源超限：返回失败，不写配置。
+
+统筹器支持抓包、提取和拨号的分步或组合执行：
 
 ```text
-python3 coordinator.py --capture 30 --interface 12
+python3 coordinator.py --capture 30 --interface <interface>
 python3 coordinator.py --extract .temp/stb.pcap
 python3 coordinator.py --dhcp
-```
-
-常用管理参数：
-
-```text
-python3 coordinator.py --show
-python3 coordinator.py --reset
 python3 coordinator.py --interactive
-python3 coordinator.py --restore
-python3 coordinator.py --config ipoedhcp_config.json --log-level INFO
 ```
 
-`--show` 显示当前 JSON 配置，`--reset` 恢复默认配置，`--interactive` 进入交互菜单。交互模式会显示当前接口；抓包和直接拨号每次都会重新列出网卡。Windows 主列表只显示状态为 `Up` 的非 Bluetooth、非虚拟接口；没有安全候选时会显示风险接口及原因，必须输入区分大小写的 `USE` 才能采用。取消、状态查询失败或接口失效不会写入配置或创建 journal。
+## 运行与恢复
 
-交互抓包始终创建新的 `.temp/dhcp-*.pcap`，不会覆盖之前导入或提取的文件。抓包完成后先恢复正式配置，只有参数提取成功才原子合并有效 DHCP 信息和新 PCAP 引用；提取失败时保留新 PCAP 供诊断，原 MAC、接口、Options、网络参数和有效 PCAP 引用不变。主菜单空输入刷新，`Ctrl+C` 正常退出且不输出 traceback。`--capture`、`--extract`、`--dhcp` 可以组合使用；`--pcap` 指定抓包文件，`--duration` 指定抓包秒数。`--restore` 直接透传独立恢复流程，不能与其他主操作组合，也不会读取 `--config` 指向的配置。
+程序在修改网卡前保存恢复 journal，正常停止、DHCP 失败和可处理异常都会执行 DHCP Release、恢复网卡并校验结果。正常停止请按一次 `Ctrl+C`；重复中断只报告当前清理阶段，不会重入恢复。
 
-交互菜单的“清空配置”要求输入区分大小写的 `CLEAR`，只恢复完整默认 JSON，不删除运行资产或 journal。“手动填写”覆盖 MAC、Option 12/43/50/60/61/125、点分十进制子网掩码、网关、DNS 和抓包时长：Enter 保留，`-` 清空，无效输入继续当前字段；所有编辑先进入内存草稿，仅输入 `SAVE` 才一次性原子保存，取消或中断不修改正式配置。存在待恢复 journal 时，这两个写操作同样受安全门禁阻断。
-
-### Windows 启动器
-
-Windows 可运行：
+手动恢复命令：
 
 ```text
-run.cmd --show
-run.cmd --config ipoedhcp_config.json --interactive
-run.cmd --restore
+python3 ipoedhcp.py --restore
+python3 ipoedhcp.py --restore --log-level DEBUG
+python3 coordinator.py --restore
 ```
 
-启动器优先进入可用的 PowerShell；业务运行时选择最高版本 `pwsh.exe` 并在其能力探针失败时直接回退 Windows PowerShell 5.1。业务进程结束后启动器原样传播退出码且不暂停。macOS/Linux 可运行 `sudo ./run.sh` 进入统筹器，或运行 `sudo ./run.sh --restore` 手动恢复。
+Windows 使用 `run.cmd --restore`，macOS/Linux 使用 `sudo ./run.sh --restore`。`--restore` 是独立操作，不读取拨号配置；无 journal 时幂等成功。恢复或校验失败时返回 `5`，保留 journal 和接口现场，并拒绝新的拨号。此时不要删除或编辑 journal，应先检查权限、接口和网络管理状态，再重试恢复并人工核对 IPv4、路由、DNS 与 DHCP 状态。
 
-### 恢复命令与自动恢复
+整机断电不保证执行进程内恢复。重启后应先运行手动恢复命令。真实 Windows 网卡以及 Windows 10/11 x86、x64、ARM64 验收仍是发布前门禁。
 
-恢复同时提供事务自动流程、watchdog 和独立手动命令。手动命令只接受程序按当前平台确定的默认 journal，不提供任意 journal 路径参数。
+## 安全限制
 
-1. 拨号开始前创建 schema v2 恢复日志；
-2. 正常 Stop、`Ctrl+C`、DHCP 失败和可处理异常时恢复网卡；
-3. 父进程异常退出时，由 watchdog 读取恢复日志并执行恢复；
-4. 断电重启或需要人工重试时，先运行 `python3 ipoedhcp.py --restore`、`run.cmd --restore` 或 `sudo ./run.sh --restore`；
-5. 恢复成功后删除日志，恢复失败时保留日志并记录错误，后续启动继续重试。
+仅在你拥有授权的实验网或维护网中运行，并优先使用独立测试网卡。运行期间 IPv4 地址、路由、DNS、DHCP 模式和网卡指标会暂时改变；不要在承载日常办公、生产业务或未知 DHCP 服务的接口上使用。
 
-只要默认 journal 存在，程序就启用安全门禁：交互模式仅允许查看配置、恢复网卡和退出；非交互抓包、提取、拨号和重置在写配置或改网卡前返回 `5`，只读接口列表保持可用。恢复成功但 journal 未实际删除时不会解除门禁，也不会自动继续原操作。
+PCAP、配置、日志和 journal 可能包含 MAC、IP、接口名称、主机名、厂商标识及运营商字段。不要将真实文件提交到公开仓库；分享前应脱敏并限制权限。INFO 日志只记录单播路由数量，DEBUG 日志可能包含具体端点。
 
-Windows 恢复 AutomaticMetric 时，原状态为 `Enabled` 只恢复自动指标；原状态为 `Disabled` 才同时恢复 InterfaceMetric。恢复不会执行 `ipconfig /renew`，配置写入、每 500 ms 一次的状态收敛检查和最终校验共享 30 秒总预算。原状态为 DHCP 时，校验只要求 DHCP 模式、DNS、指标和程序手动地址清理正确，允许 Windows 稍后异步取得 DHCP 地址。
-
-Windows 外部恢复的唯一标准命令是 `.\run.cmd --restore`，仅可附加 `--log-level INFO` 或 `--log-level DEBUG`。`-restore` 或与其他参数组合会返回 `2`；恢复成功返回 `0`，超时、校验失败、权限或运行时错误返回 `5`。启动器直接调用独立恢复入口并原样传回退出码，不进入交互、不拨号，也不显示结束暂停。
-
-Windows 启动器在 runtime 安装成功后删除本次校验过的 Python ZIP 和 Scapy wheel。启动时清理 owner 已失效的 `runtime-install-*`；无 owner 的旧目录和已知 `*.tmp` 仅在超过 24 小时后清理。runtime、PCAP、日志和失败 journal 属于运行或诊断资产，不在该清理范围内。
-
-恢复状态目录：
-
-- Windows：项目 `.temp/network-recovery.json`；
-- macOS：`/Library/Application Support/IPoESimulator/network-recovery.json`；
-- Linux：`/var/lib/ipoe-simulator/network-recovery.json`。
-
-断电后的建议步骤：
-
-1. 重启后先不要再次抓包或拨号；
-2. 使用管理员/root 权限运行对应平台的 `--restore` 命令；
-3. 返回 `0` 后人工核对接口 IPv4、默认路由、DNS、DHCP 模式和网络管理器状态；
-4. 若返回 `5`，保留默认 journal 和接口现场，根据其中最近恢复阶段、最后完成步骤和错误原因排查后重试；不要删除或手工改写 journal。
-
-## 恢复安全
-
-拨号前创建 schema v2 恢复日志，记录完整接口标识和平台信息。共享事务按 `snapshot → prepare → apply → restore → verify` 执行。恢复流程兼容旧版 Windows schema v1，并对跨平台日志执行平台校验。
-
-Windows watchdog 监听父 PID；macOS/Linux watchdog 监听继承管道。恢复失败时保留日志并记录 `restore_failed`，下一次运行优先处理待恢复日志。
-
-纯 CLI 运行模式提供进程生命周期内的自动恢复能力；整机重新启动后，管理员可通过独立命令根据保留的恢复日志执行恢复。该路径不依赖 Scapy 或 Npcap。
+Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统网络工具与 `libpcap/BPF`；Linux 使用系统网络工具、PF_PACKET 和 `tcpdump`。Npcap 不随项目分发，是受其独立许可条款约束的外部运行依赖；其他列出的系统组件同样属于运行环境，不是本项目分发的开源依赖。操作系统断电、内核或网络管理器异常可能超出进程内恢复能力。
 
 ## 致谢
 
-感谢以下开源项目为本项目提供支持：
+本项目感谢以下实际使用的开源工具：
 
-- [Scapy](https://github.com/secdev/scapy)：用于 DHCP 报文构造、二层收发、抓包和 PCAP/PCAPNG 解析；
-- [Python](https://www.python.org/)：提供项目运行时及标准库支持。
-
-上述项目仍归其原作者及维护社区所有，并分别遵循各自的许可证和使用条款。
+- **Python**：作为项目运行时并提供标准库；来源为 [Python Software Foundation](https://www.python.org/psf/)，采用 [Python Software Foundation License Version 2（PSF License）](https://docs.python.org/3/license.html)。
+- **Scapy**：用于 DHCP、二层报文收发以及 PCAP/PCAPNG 读写；来源为 [Scapy 项目（secdev/scapy）](https://github.com/secdev/scapy)，采用 [GPL-2.0-only](https://github.com/secdev/scapy/blob/master/LICENSE)，完整上游许可证文本见 `licenses/SCAPY-LICENSE.txt`。

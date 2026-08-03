@@ -47,6 +47,56 @@ class ReleaseVerificationError(RuntimeError):
     pass
 
 
+def _decode_package_text(package: zipfile.ZipFile, path: str) -> str:
+    try:
+        return package.read(path).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ReleaseVerificationError(f"{path} 不是有效 UTF-8 文本") from exc
+
+
+def _verify_license_files(package: zipfile.ZipFile, expected_root: str) -> None:
+    project_license_path = f"{expected_root}/LICENSE"
+    project_license = _decode_package_text(package, project_license_path)
+    required_gpl_v2_markers = (
+        "GNU GENERAL PUBLIC LICENSE",
+        "Version 2, June 1991",
+        "TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION",
+        "END OF TERMS AND CONDITIONS",
+        "How to Apply These Terms to Your New Programs",
+    )
+    if len(project_license) < 15_000 or any(
+        marker not in project_license for marker in required_gpl_v2_markers
+    ):
+        raise ReleaseVerificationError("LICENSE 不是完整的 GNU GPL v2 文本")
+
+    notices_path = f"{expected_root}/THIRD-PARTY-NOTICES.txt"
+    notices = _decode_package_text(package, notices_path)
+    required_notice_markers = (
+        "Python Software Foundation License Version 2",
+        "Scapy is distributed under GPL-2.0-only",
+        "project source is licensed under GPL-2.0-only",
+        "Npcap",
+        "not distributed with this project",
+    )
+    if any(marker not in notices for marker in required_notice_markers):
+        raise ReleaseVerificationError("THIRD-PARTY-NOTICES.txt 缺少必要许可声明")
+
+    scapy_license_path = f"{expected_root}/licenses/SCAPY-LICENSE.txt"
+    scapy_license = _decode_package_text(package, scapy_license_path)
+    required_scapy_markers = required_gpl_v2_markers + (
+        "Scapy 2.7.0",
+        "https://github.com/secdev/scapy",
+        "Philippe Biondi and the Scapy project contributors",
+        "GPL-2.0-only",
+    )
+    if len(scapy_license) < 15_000 or any(
+        marker not in scapy_license for marker in required_scapy_markers
+    ):
+        raise ReleaseVerificationError(
+            "licenses/SCAPY-LICENSE.txt 不是完整的 Scapy GPL-2.0 许可证文本"
+        )
+
+
 def read_pe_machine(executable: bytes) -> int:
     if executable[:2] != b"MZ":
         raise ReleaseVerificationError("runtime/python.exe 不是有效的 PE 文件")
@@ -107,7 +157,10 @@ def verify_archive(
                 f"轻量包不应携带 Python runtime: {runtime_files[0]}"
             )
 
-        version_value = package.read(f"{expected_root}/VERSION").decode("utf-8").strip()
+        _verify_license_files(package, expected_root)
+        version_value = _decode_package_text(
+            package, f"{expected_root}/VERSION"
+        ).strip()
         if version_value != version:
             raise ReleaseVerificationError(
                 f"VERSION 应为 {version!r}，实际为 {version_value!r}"
