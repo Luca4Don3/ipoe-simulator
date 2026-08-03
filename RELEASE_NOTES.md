@@ -6,6 +6,8 @@
 
 PCAP、配置和 DEBUG 日志可能包含运营商控制地址。该功能仅处理明文 ChannelList，不解密 TLS、不登录实时 EPG，也不扫描其他 HTTP 地址。当前版本不得表述为已发布；真实 Windows 10/11 网卡及 x86/x64/ARM64 验收仍是发布前门禁。
 
+项目许可证从 GPL-3.0-only 调整为 GPL-2.0-only，根目录 `LICENSE` 已替换为完整 GNU GPL v2 文本。发布附件同步携带项目许可证、第三方声明和 Scapy 2.7.0 的完整上游 GPL-2.0 许可证文本。Python 运行时采用 PSF License；Npcap 不随项目分发，是受独立许可条款约束的外部运行依赖。本次调整不改变 CLI、`network.unicast_routes`、journal v2 `app_routes` 或三平台网络接口。
+
 ---
 
 # IPoE Simulator v0.5.3
@@ -82,7 +84,7 @@ macOS 26 不宣称自带 Python。源码运行前必须通过 Command Line Tools
 
 # IPoE Simulator v0.2.1
 
-本版本补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，许可证仍为 GPL-3.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
+本版本当时补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，当时许可证为 GPL-3.0-only；项目自 v0.6.0 源码起改为 GPL-2.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
 
 普通用户请下载与 Windows 原生架构匹配的平台附件：
 
