@@ -16,6 +16,7 @@ from ipoe_simulator.network_transaction import (
 )
 
 
+# 合成测试数据：本地管理 MAC；IP 使用 RFC 5737 文档保留网段。
 INTERFACE = InterfaceInfo(
     pcap_name="test0",
     name="test0",
@@ -49,6 +50,7 @@ class FakeBackend(NetworkBackend):
         self.restored = False
         self.prepared = False
         self.applied = False
+        self.received_app_routes: list[str] = []
 
     def capture_snapshot(self, interface: InterfaceInfo) -> dict[str, Any]:
         self.assert_interface(interface)
@@ -72,9 +74,11 @@ class FakeBackend(NetworkBackend):
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str],
     ) -> None:
         self.assert_interface(interface)
         self.applied = True
+        self.received_app_routes = list(app_routes)
         if self.fail_apply:
             raise NetworkStateError("injected apply failure")
 
@@ -93,6 +97,7 @@ class FakeBackend(NetworkBackend):
         original: dict[str, Any],
         current: dict[str, Any],
         app_ip: str | None,
+        app_routes: list[str],
     ) -> list[str]:
         return list(self.verify_errors)
 
@@ -103,6 +108,26 @@ class FakeBackend(NetworkBackend):
 
 
 class TransactionTests(unittest.TestCase):
+    def test_info_log_discloses_route_count_only(self) -> None:
+        backend = FakeBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "network-recovery.json"
+            transaction = NetworkTransaction.begin(
+                INTERFACE, journal, backend=backend, start_watchdog=False
+            )
+            with self.assertLogs("ipoe-simulator.transaction", level="INFO") as captured:
+                transaction.configure_lease(
+                    "192.0.2.10",
+                    SUBNET_MASK,
+                    "192.0.2.1",
+                    ["192.0.2.53"],
+                    ["198.51.100.10"],
+                )
+            transaction.restore()
+        output = "\n".join(captured.output)
+        self.assertIn("count=1", output)
+        self.assertNotIn("198.51.100.10", output)
+
     def test_damaged_journal_is_preserved(self) -> None:
         backend = FakeBackend()
         with tempfile.TemporaryDirectory() as directory:
@@ -190,6 +215,42 @@ class TransactionTests(unittest.TestCase):
             transaction.restore()
             self.assertTrue(backend.restored)
             self.assertFalse(journal.exists())
+
+    def test_app_routes_are_journaled_before_partial_apply_failure(self) -> None:
+        backend = FakeBackend(fail_apply=True)
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "network-recovery.json"
+            transaction = NetworkTransaction.begin(
+                INTERFACE, journal, backend=backend, start_watchdog=False
+            )
+            with self.assertRaisesRegex(NetworkStateError, "injected apply"):
+                transaction.configure_lease(
+                    "198.51.100.10",
+                    SUBNET_MASK,
+                    "198.51.100.1",
+                    [],
+                    ["203.0.113.10"],
+                )
+            saved = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(saved["schema"], 2)
+            self.assertEqual(saved["app_routes"], ["203.0.113.10"])
+            self.assertEqual(backend.received_app_routes, ["203.0.113.10"])
+            transaction.restore()
+            self.assertFalse(journal.exists())
+
+    def test_routes_require_gateway_before_backend_apply(self) -> None:
+        backend = FakeBackend()
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "network-recovery.json"
+            transaction = NetworkTransaction.begin(
+                INTERFACE, journal, backend=backend, start_watchdog=False
+            )
+            with self.assertRaisesRegex(NetworkStateError, "未提供网关"):
+                transaction.configure_lease(
+                    "198.51.100.10", SUBNET_MASK, None, [], ["203.0.113.10"]
+                )
+            self.assertFalse(backend.applied)
+            transaction.restore()
 
     def test_restore_failure_preserves_journal(self) -> None:
         backend = FakeBackend(fail_restore=True)

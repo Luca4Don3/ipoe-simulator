@@ -139,6 +139,7 @@ def apply_lease(
     subnet_mask: str,
     gateway: str | None,
     dns_servers: list[str],
+    app_routes: list[str],
 ) -> None:
     prefix = _prefix_length(subnet_mask)
     gateway_part = f" -DefaultGateway {_ps_string(gateway)}" if gateway else ""
@@ -154,6 +155,18 @@ New-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -IPAddress {_ps_string
 {dns_command}
 """
     _run_powershell(script)
+    for number, address in enumerate(app_routes, start=1):
+        route_script = f"""
+$ErrorActionPreference = 'Stop'
+$idx = {int(interface_index)}
+New-NetRoute -PolicyStore ActiveStore -InterfaceIndex $idx -AddressFamily IPv4 -DestinationPrefix {_ps_string(address + '/32')} -NextHop {_ps_string(gateway or '')} -ErrorAction Stop | Out-Null
+"""
+        try:
+            _run_powershell(route_script)
+        except NetworkStateError as exc:
+            raise NetworkStateError(
+                f"应用单播静态路由失败（第 {number}/{len(app_routes)} 条）"
+            ) from exc
 
 
 def _restore_script(snapshot: dict[str, Any]) -> str:
@@ -264,7 +277,12 @@ def _address_set(snapshot: dict[str, Any]) -> set[tuple[str, int]]:
     }
 
 
-def verify_restored(original: dict[str, Any], current: dict[str, Any], app_ip: str | None) -> list[str]:
+def verify_restored(
+    original: dict[str, Any],
+    current: dict[str, Any],
+    app_ip: str | None,
+    app_routes: list[str] | None = None,
+) -> list[str]:
     errors: list[str] = []
     original_dhcp = str(original.get("dhcp", "")).lower()
     current_dhcp = str(current.get("dhcp", "")).lower()
@@ -327,6 +345,30 @@ def verify_restored(original: dict[str, Any], current: dict[str, Any], app_ip: s
         }
         if expected_routes != actual_routes:
             errors.append("静态路由未完整恢复")
+    original_route_rows = {
+        (
+            str(route.get("destination_prefix")),
+            str(route.get("next_hop")),
+            int(route.get("route_metric", 0)),
+            str(route.get("protocol", "")).lower(),
+        )
+        for route in original.get("routes", [])
+    }
+    app_prefixes = {f"{address}/32" for address in (app_routes or [])}
+    residual = [
+        route
+        for route in current.get("routes", [])
+        if str(route.get("destination_prefix")) in app_prefixes
+        and str(route.get("protocol", "")).lower() not in {"local", "dhcp"}
+        and (
+            str(route.get("destination_prefix")),
+            str(route.get("next_hop")),
+            int(route.get("route_metric", 0)),
+            str(route.get("protocol", "")).lower(),
+        ) not in original_route_rows
+    ]
+    if residual:
+        errors.append("程序配置的静态路由仍然存在")
     return errors
 
 
@@ -351,6 +393,7 @@ class WindowsNetworkBackend(NetworkBackend):
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str],
     ) -> None:
         apply_lease(
             interface.index,
@@ -358,6 +401,7 @@ class WindowsNetworkBackend(NetworkBackend):
             subnet_mask,
             gateway,
             dns_servers,
+            app_routes,
         )
 
     def restore(
@@ -373,6 +417,7 @@ class WindowsNetworkBackend(NetworkBackend):
         snapshot: dict[str, Any],
         app_ip: str | None,
         progress: Callable[[str, str], None],
+        app_routes: list[str] | None = None,
     ) -> list[str]:
         deadline = time.monotonic() + 30.0
         progress("configuration", "配置写入开始")
@@ -382,7 +427,7 @@ class WindowsNetworkBackend(NetworkBackend):
         dns_redelivered = False
         while True:
             current = self._capture_with_budget(interface.index, deadline)
-            last_errors = verify_restored(snapshot, current, app_ip)
+            last_errors = verify_restored(snapshot, current, app_ip, app_routes or [])
             if not last_errors:
                 progress("verification", "校验通过")
                 return []
@@ -438,8 +483,9 @@ class WindowsNetworkBackend(NetworkBackend):
         original: dict[str, Any],
         current: dict[str, Any],
         app_ip: str | None,
+        app_routes: list[str],
     ) -> list[str]:
-        return verify_restored(original, current, app_ip)
+        return verify_restored(original, current, app_ip, app_routes)
 
 
 def restore_from_journal(journal_path: str | Path) -> None:

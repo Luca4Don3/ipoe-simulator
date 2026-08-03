@@ -161,6 +161,7 @@ def _run_dhcp(config: Config, args: argparse.Namespace) -> int:
             lease.subnet_mask,
             lease.gateway,
             lease.dns_servers,
+            config.get("network", "unicast_routes", default=[]),
         )
         LOGGER.info(
             "DHCP 租约已应用 ip=%s subnet_mask=%s gateway=%s dns_servers=%s",

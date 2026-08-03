@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
 import os
 import tempfile
@@ -14,7 +15,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "device": {"mac": "", "interface": ""},
     "dhcp_options": {f"option{code}": "" for code in OPTION_CODES},
     "capture": {"pcap_file": "", "duration": 30},
-    "network": {"subnet_mask": "", "gateway": "", "dns": []},
+    "network": {"subnet_mask": "", "gateway": "", "dns": [], "unicast_routes": []},
     "behavior": {"auto_renew": True, "restore_on_exit": True},
     "logging": {"directory": ""},
 }
@@ -22,6 +23,29 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 class ConfigError(ValueError):
     pass
+
+
+def normalize_unicast_routes(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        raise ConfigError("network.unicast_routes 必须是 IPv4 地址数组")
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            raise ConfigError("network.unicast_routes 只能包含 IPv4 地址字符串")
+        try:
+            address = ipaddress.IPv4Address(value)
+        except ipaddress.AddressValueError as exc:
+            raise ConfigError(f"network.unicast_routes 包含非法 IPv4 地址: {value}") from exc
+        if address.is_multicast or address.is_unspecified or address.is_loopback or int(address) == 0xFFFFFFFF:
+            raise ConfigError(f"network.unicast_routes 不是可路由单播 IPv4 地址: {value}")
+        normalized = str(address)
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    if len(result) > 256:
+        raise ConfigError("network.unicast_routes 最多允许 256 个地址")
+    return result
 
 
 def deep_merge(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
@@ -174,6 +198,12 @@ class Config:
         for key in ("subnet_mask", "gateway", "dns"):
             if key in network and network[key] not in (None, "", []):
                 self.set(network[key], "network", key)
+        if "unicast_routes" in network:
+            self.set(
+                normalize_unicast_routes(network["unicast_routes"]),
+                "network",
+                "unicast_routes",
+            )
         self.set(str(Path(pcap_path).resolve()), "capture", "pcap_file")
 
     def validate_for_dhcp(self) -> None:
@@ -190,3 +220,10 @@ class Config:
             value = self.get("dhcp_options", f"option{code}")
             if value:
                 option_bytes(str(value), code)
+        self.set(
+            normalize_unicast_routes(
+                self.get("network", "unicast_routes", default=[])
+            ),
+            "network",
+            "unicast_routes",
+        )

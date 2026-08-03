@@ -83,6 +83,7 @@ class NetworkBackend(ABC):
         subnet_mask: str,
         gateway: str | None,
         dns_servers: list[str],
+        app_routes: list[str],
     ) -> None:
         raise NotImplementedError
 
@@ -100,6 +101,7 @@ class NetworkBackend(ABC):
         original: dict[str, Any],
         current: dict[str, Any],
         app_ip: str | None,
+        app_routes: list[str],
     ) -> list[str]:
         raise NotImplementedError
 
@@ -109,6 +111,7 @@ class NetworkBackend(ABC):
         snapshot: dict[str, Any],
         app_ip: str | None,
         progress: Callable[[str, str], None],
+        app_routes: list[str] | None = None,
     ) -> list[str]:
         """恢复并校验；平台可覆盖以提供共享总预算的有界恢复。"""
 
@@ -116,7 +119,7 @@ class NetworkBackend(ABC):
         self.restore(interface, snapshot)
         progress("convergence", "配置写入完成")
         current = self.capture_snapshot(interface)
-        errors = self.verify_restored(snapshot, current, app_ip)
+        errors = self.verify_restored(snapshot, current, app_ip, app_routes or [])
         if not errors:
             progress("verification", "校验通过")
         return errors
