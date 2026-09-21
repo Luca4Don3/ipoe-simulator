@@ -144,10 +144,3 @@ Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统�
 
 - **Python**：作为项目运行时并提供标准库；来源为 [Python Software Foundation](https://www.python.org/psf/)，采用 [Python Software Foundation License Version 2（PSF License）](https://docs.python.org/3/license.html)。
 - **Scapy**：用于 DHCP、二层报文收发以及 PCAP/PCAPNG 读写；来源为 [Scapy 项目（secdev/scapy）](https://github.com/secdev/scapy)，采用 [GPL-2.0-only](https://github.com/secdev/scapy/blob/master/LICENSE)，完整上游许可证文本见 `licenses/SCAPY-LICENSE.txt`。
-
-## 项目治理
-
-- 安全问题与披露方式：`SECURITY.md`
-- 问题反馈与测试数据规则：`CONTRIBUTING.md`（不接受外部代码贡献，仅接受 Issue）
-- 社区行为要求：`CODE_OF_CONDUCT.md`
-- 使用支持范围：`SUPPORT.md`
