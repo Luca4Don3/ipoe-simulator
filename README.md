@@ -134,7 +134,7 @@ Windows 使用 `run.cmd --restore`，macOS/Linux 使用 `sudo ./run.sh --restore
 
 PCAP、配置、日志和 journal 可能包含 MAC、IP、接口名称、主机名、厂商标识及运营商字段。不要将真实文件提交到公开仓库；分享前应脱敏并限制权限。INFO 日志只记录单播路由数量，DEBUG 日志可能包含具体端点。
 
-测试数据只允许使用 RFC 文档/基准测试保留地址、本地管理 MAC、协议要求的广播或组播常量以及显式占位符。提交前请阅读 `CONTRIBUTING.md` 和 `SECURITY.md`，并完成敏感信息审计。安全问题不得携带真实 PCAP、配置、日志或 journal 提交到公开 Issue。
+测试数据只允许使用 RFC 文档/基准测试保留地址、本地管理 MAC、协议要求的广播或组播常量以及显式占位符。提交改动或在 Issue 中反馈前请阅读 `CONTRIBUTING.md` 和 `SECURITY.md`；Issue 内容同样只使用合成数据。安全问题不得携带真实 PCAP、配置、日志或 journal 提交到公开 Issue。
 
 Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统网络工具与 `libpcap/BPF`；Linux 使用系统网络工具、PF_PACKET 和 `tcpdump`。Npcap 不随项目分发，是受其独立许可条款约束的外部运行依赖；其他列出的系统组件同样属于运行环境，不是本项目分发的开源依赖。操作系统断电、内核或网络管理器异常可能超出进程内恢复能力。
 
@@ -148,6 +148,6 @@ Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统�
 ## 项目治理
 
 - 安全问题与披露方式：`SECURITY.md`
-- 贡献流程与测试数据规则：`CONTRIBUTING.md`
+- 问题反馈与测试数据规则：`CONTRIBUTING.md`（不接受外部代码贡献，仅接受 Issue）
 - 社区行为要求：`CODE_OF_CONDUCT.md`
 - 使用支持范围：`SUPPORT.md`
