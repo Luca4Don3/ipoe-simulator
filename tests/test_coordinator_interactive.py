@@ -73,7 +73,7 @@ class CoordinatorInteractiveTests(unittest.TestCase):
             pcap_name=r"\Device\NPF_{OTHER}",
             name="以太网",
             description="Ethernet Adapter",
-            mac="11:22:33:44:55:66",
+            mac="02:00:00:00:00:03",
             index=4,
         )
         with tempfile.TemporaryDirectory() as directory:

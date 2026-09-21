@@ -37,9 +37,13 @@ New-Item -ItemType Directory -Path $PackageDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 $rootFiles = @(
+    'CODE_OF_CONDUCT.md',
+    'CONTRIBUTING.md',
     'README.md',
     'LICENSE',
     'RELEASE_NOTES.md',
+    'SECURITY.md',
+    'SUPPORT.md',
     'THIRD-PARTY-NOTICES.txt',
     'VERSION',
     'check_env.py',

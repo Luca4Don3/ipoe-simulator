@@ -4,7 +4,7 @@ IPoE Simulator 是面向授权实验网和维护网的 DHCPv4/IPoE CLI 工具，
 
 > 声明：本项目的测试环境均基于浙江电信网络环境；其他地区或运营商环境可能存在差异，使用前请结合实际网络配置进行验证。
 
-当前源码版本为待发布的 `v0.6.0`，最新正式发布版本仍为 `v0.5.2`。`v0.6.0` 增加从明文 ChannelList 提取单播控制端点，并在租约期间按 DHCP ACK 网关配置临时主机路由的能力。Windows CI、真实网卡和三架构门禁完成前，不应把当前源码描述为已经发布或通过实机验收。
+当前源码版本为待发布的 `v0.6.0`，最新正式发布版本仍为 `v0.5.3`。`v0.6.0` 增加从明文 ChannelList 提取单播控制端点，并在租约期间按 DHCP ACK 网关配置临时主机路由的能力。Windows CI、真实网卡和三架构门禁完成前，不应把当前源码描述为已经发布或通过实机验收。
 
 项目采用 GPL-2.0-only，完整条款见 `LICENSE`。工具不会修改 IPv6，不提供 IPTV 播放、实时 EPG 登录、GUI、开机服务或断电恢复服务。
 
@@ -17,7 +17,7 @@ python3 check_env.py
 python3 check_env.py --json
 ```
 
-普通 Windows 用户应从 GitHub Release 下载与原生架构匹配的 `v0.5.2` 附件，并核对 `SHA256SUMS.txt`。源码运行的基本流程是：
+普通 Windows 用户应从 GitHub Release 下载与原生架构匹配的 `v0.5.3` 附件，并核对 `SHA256SUMS.txt`。源码运行的基本流程是：
 
 ```text
 python3 ipoedhcp.py --list-interfaces
@@ -134,6 +134,8 @@ Windows 使用 `run.cmd --restore`，macOS/Linux 使用 `sudo ./run.sh --restore
 
 PCAP、配置、日志和 journal 可能包含 MAC、IP、接口名称、主机名、厂商标识及运营商字段。不要将真实文件提交到公开仓库；分享前应脱敏并限制权限。INFO 日志只记录单播路由数量，DEBUG 日志可能包含具体端点。
 
+测试数据只允许使用 RFC 文档/基准测试保留地址、本地管理 MAC、协议要求的广播或组播常量以及显式占位符。提交前请阅读 `CONTRIBUTING.md` 和 `SECURITY.md`，并完成敏感信息审计。安全问题不得携带真实 PCAP、配置、日志或 journal 提交到公开 Issue。
+
 Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统网络工具与 `libpcap/BPF`；Linux 使用系统网络工具、PF_PACKET 和 `tcpdump`。Npcap 不随项目分发，是受其独立许可条款约束的外部运行依赖；其他列出的系统组件同样属于运行环境，不是本项目分发的开源依赖。操作系统断电、内核或网络管理器异常可能超出进程内恢复能力。
 
 ## 致谢
@@ -142,3 +144,10 @@ Windows 使用 PowerShell、系统网络 cmdlet 和 Npcap；macOS 使用系统�
 
 - **Python**：作为项目运行时并提供标准库；来源为 [Python Software Foundation](https://www.python.org/psf/)，采用 [Python Software Foundation License Version 2（PSF License）](https://docs.python.org/3/license.html)。
 - **Scapy**：用于 DHCP、二层报文收发以及 PCAP/PCAPNG 读写；来源为 [Scapy 项目（secdev/scapy）](https://github.com/secdev/scapy)，采用 [GPL-2.0-only](https://github.com/secdev/scapy/blob/master/LICENSE)，完整上游许可证文本见 `licenses/SCAPY-LICENSE.txt`。
+
+## 项目治理
+
+- 安全问题与披露方式：`SECURITY.md`
+- 贡献流程与测试数据规则：`CONTRIBUTING.md`
+- 社区行为要求：`CODE_OF_CONDUCT.md`
+- 使用支持范围：`SUPPORT.md`

@@ -8,6 +8,8 @@ PCAP、配置和 DEBUG 日志可能包含运营商控制地址。该功能仅处
 
 项目许可证从 GPL-3.0-only 调整为 GPL-2.0-only，根目录 `LICENSE` 已替换为完整 GNU GPL v2 文本。发布附件同步携带项目许可证、第三方声明和 Scapy 2.7.0 的完整上游 GPL-2.0 许可证文本。Python 运行时采用 PSF License；Npcap 不随项目分发，是受独立许可条款约束的外部运行依赖。本次调整不改变 CLI、`network.unicast_routes`、journal v2 `app_routes` 或三平台网络接口。
 
+开源准备同步限制测试数据只能使用 RFC 文档或基准测试保留地址、本地管理 MAC、协议常量和显式占位符；发布包会拒绝 PCAP、配置、journal、数据库及密钥材料。GitHub Actions 改为最小权限并固定到不可变 commit SHA，仓库和发布包补充安全、贡献、行为准则及支持文档。
+
 ---
 
 # IPoE Simulator v0.5.3
