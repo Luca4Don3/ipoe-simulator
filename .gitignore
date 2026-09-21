@@ -6,6 +6,22 @@ ipoedhcp_config.json
 HANDOFF.md
 *.log
 
+# 本地网络数据与敏感配置
+.env
+.env.*
+!.env.example
+*.pcap
+*.pcapng
+network-recovery.json
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+*.p12
+*.pfx
+*.cookie
+
 # macOS 系统文件
 .DS_Store
 .AppleDouble
