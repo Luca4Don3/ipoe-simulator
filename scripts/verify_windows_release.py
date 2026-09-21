@@ -15,9 +15,13 @@ PE_MACHINE = {
     "arm64": 0xAA64,
 }
 REQUIRED_FILES = {
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
     "README.md",
     "LICENSE",
     "RELEASE_NOTES.md",
+    "SECURITY.md",
+    "SUPPORT.md",
     "THIRD-PARTY-NOTICES.txt",
     "VERSION",
     "config.example.json",
@@ -35,11 +39,27 @@ FORBIDDEN_PARTS = {
     "tests",
 }
 FORBIDDEN_NAMES = {
+    ".env",
     "AGENTS.md",
     "HANDOFF.md",
     "ipoe-simulator.log",
     "ipoedhcp_config.json",
+    "network-recovery.json",
     "run.sh",
+}
+FORBIDDEN_SUFFIXES = {
+    ".cookie",
+    ".db",
+    ".key",
+    ".log",
+    ".p12",
+    ".pcap",
+    ".pcapng",
+    ".pem",
+    ".pfx",
+    ".pyc",
+    ".sqlite",
+    ".sqlite3",
 }
 
 
@@ -146,7 +166,9 @@ def verify_archive(
                 raise ReleaseVerificationError(f"ZIP 包含禁止目录: {relative}")
             if relative.name in FORBIDDEN_NAMES:
                 raise ReleaseVerificationError(f"ZIP 包含禁止文件: {relative}")
-            if relative.suffix in {".pyc", ".log"}:
+            if relative.name.startswith(".env."):
+                raise ReleaseVerificationError(f"ZIP 包含禁止配置: {relative}")
+            if relative.suffix.lower() in FORBIDDEN_SUFFIXES:
                 raise ReleaseVerificationError(f"ZIP 包含禁止文件类型: {relative}")
 
         runtime_files = [

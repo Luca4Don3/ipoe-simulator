@@ -120,7 +120,7 @@ class ExtractorTests(unittest.TestCase):
 
         # 合成测试数据：本地管理 MAC 与 RFC 5737 文档保留地址。
         mac = ":".join(("aa", "bb", "cc", "dd", "ee", "ff"))
-        peer_mac = ":".join(("00", "11", "22", "33", "44", "55"))
+        peer_mac = ":".join(("02", "00", "00", "00", "00", "02"))
         broadcast_mac = ":".join(["ff"] * 6)
         broadcast_ip = ".".join(["255"] * 4)
         subnet_mask = ".".join(("255", "255", "255", "0"))
@@ -147,7 +147,7 @@ class ExtractorTests(unittest.TestCase):
 
         # 合成测试数据：本地管理 MAC、RFC 5737 地址及必要的组播地址。
         mac = "aa:bb:cc:dd:ee:ff"
-        peer_mac = "00:11:22:33:44:55"
+        peer_mac = "02:00:00:00:00:02"
         broadcast_mac = "ff:ff:ff:ff:ff:ff"
         xid = 0x10203040
         base = [

@@ -92,6 +92,27 @@ class ReleasePackagingTests(unittest.TestCase):
             with self.assertRaisesRegex(ReleaseVerificationError, "不应携带"):
                 verify_archive(archive, "x64", "0.1.0")
 
+    def test_rejects_sensitive_runtime_data(self) -> None:
+        forbidden = (
+            ".env",
+            ".env.local",
+            "capture.pcap",
+            "capture.pcapng",
+            "network-recovery.json",
+            "private.key",
+            "state.sqlite",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            for relative in forbidden:
+                with self.subTest(relative=relative):
+                    archive = self.make_archive(
+                        Path(directory), extra_file=relative
+                    )
+                    with self.assertRaisesRegex(
+                        ReleaseVerificationError, "禁止"
+                    ):
+                        verify_archive(archive, "x64", "0.1.0")
+
     def test_rejects_incomplete_project_license(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             archive = self.make_archive(
