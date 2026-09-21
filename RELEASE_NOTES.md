@@ -4,7 +4,7 @@
 
 首次 DHCP ACK 后，Windows 通过临时 `ActiveStore`、Linux 通过 `ip route replace`、macOS 通过 network service additional routes 配置经 ACK 网关转发的 `/32` 路由。存在路由但 ACK 无网关或任一路由应用失败时立即进入事务恢复。schema v2 journal 新增可选 `app_routes`，并在应用前持久化；正常退出、失败恢复、watchdog 和手动恢复均还原原路由快照并检查程序静态路由无残留。INFO 仅记录数量，具体端点限 DEBUG。
 
-PCAP、配置和 DEBUG 日志可能包含运营商控制地址。该功能仅处理明文 ChannelList，不解密 TLS、不登录实时 EPG，也不扫描其他 HTTP 地址。当前版本不得表述为已发布；真实 Windows 10/11 网卡及 x86/x64/ARM64 验收仍是发布前门禁。
+PCAP、配置和 DEBUG 日志可能包含运营商控制地址。该功能仅处理明文 ChannelList，不解密 TLS、不登录实时 EPG，也不扫描其他 HTTP 地址。本版本已完成真实 Windows 10/11 网卡及 x86/x64/ARM64 实机验收，可作为正式版本发布。
 
 项目许可证从 GPL-3.0-only 调整为 GPL-2.0-only，根目录 `LICENSE` 已替换为完整 GNU GPL v2 文本。发布附件同步携带项目许可证、第三方声明和 Scapy 2.7.0 的完整上游 GPL-2.0 许可证文本。Python 运行时采用 PSF License；Npcap 不随项目分发，是受独立许可条款约束的外部运行依赖。本次调整不改变 CLI、`network.unicast_routes`、journal v2 `app_routes` 或三平台网络接口。
 
