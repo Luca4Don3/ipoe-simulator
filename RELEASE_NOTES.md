@@ -54,26 +54,6 @@ Windows `run.cmd --restore` 现在直接进入 `ipoedhcp.py --restore`，仅允�
 
 ---
 
-# IPoE Simulator v0.4.2
-
-本修订版强化 Windows 恢复与交互安全：AutomaticMetric 自动模式不再同时写入 InterfaceMetric，手动模式恢复原指标；恢复最多等待 15 秒收敛，失败返回 `5` 并保留 journal。
-
-存在待恢复 journal 时，仅允许查看配置、列出接口、手动恢复和退出，成功恢复并删除 journal 后才解除门禁。交互选卡在 Windows 上优先显示状态为 Up 的非 Bluetooth、非虚拟接口；无安全候选时展示风险原因并要求输入 `USE`。交互抓包始终生成新 PCAP，提取成功前不污染正式配置。
-
-Windows 轻量运行时安装成功后删除本次已校验的下载文件；启动时按 owner/24 小时边界清理遗留 staging 和临时文件，不清理 runtime、PCAP、日志或失败 journal。本说明不表示 `v0.4.2` 已发布，仍需通过 Windows 实机验收。
-
----
-
-# IPoE Simulator v0.4.1
-
-本版本修复 Windows 运行时启动问题。轻量发布包不再携带 Python；首次启动未找到匹配架构的 Python 3.9–3.14 时，启动器会按锁定清单下载并校验 Python 3.14.6 与 Scapy 2.7.0，再把运行时安装到包内 `runtime` 目录。
-
-PowerShell 运行时按 PowerShell 7、Windows PowerShell 5.1 的顺序逐个验证版本、UTF-8 输出和网络管理命令能力。PowerShell 7 启动失败、版本不兼容或缺少必要能力时会自动回退到能力完整的 Windows PowerShell 5.1；Windows PowerShell 5.1 以 `Function` 形式提供的网络命令也可通过探针。
-
-Windows 轻量附件提供 x86、x64、ARM64 三种架构。本说明不表示 `v0.4.1` 已发布；正式附件仍须经过 Windows CI 和目标设备验证。
-
----
-
 # IPoE Simulator v0.4.0
 
 本版本将源码支持范围明确为 Python 3.9–3.14，越界版本会显式失败；依赖升级并锁定到 Scapy 2.7.0。Python 3.9 已 EOL，本项目仅承诺应用兼容性，不承诺解释器安全维护。
@@ -84,9 +64,19 @@ macOS 26 不宣称自带 Python。源码运行前必须通过 Command Line Tools
 
 ---
 
+# IPoE Simulator v0.3.0
+
+本次 MINOR 更新实现 DHCP 租约生命周期。程序在首次 DHCP ACK 后记录租约，按服务器下发的 T1（续租）与 T2（重绑定）时间维护租约：续租以单播发往服务器，重绑定以广播发出，续租失败时重新发起完整 DHCP 交互，租约到期或收到 NAK 时重新申请。
+
+网卡恢复与文件安全同步加固。拨号前写入 schema v2 恢复日志，覆盖接口 IPv4、路由、DNS、DHCP 模式与接口指标；正常停止、DHCP 失败和可处理异常统一执行 DHCP Release、恢复与校验，恢复或校验失败返回 `5` 并保留 journal 与接口现场、拒绝新的拨号。
+
+发布流程改为锁定依赖并按架构分包：`release-dependencies.json` 固定 Python、Scapy 与 Npcap 的版本、URL 和 SHA-256，x86、x64、ARM64 各自生成独立 ZIP 与校验文件，并修正 ARM64 运行时哈希。当时源码许可证仍为 GPL-3.0-only。
+
+---
+
 # IPoE Simulator v0.2.1
 
-本版本当时补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本，当时许可证为 GPL-3.0-only；项目自 v0.6.0 源码起改为 GPL-2.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
+本版本补齐仓库与 Windows 发布包中的完整 GNU General Public License v3.0 文本；当时项目许可证为 GPL-3.0-only。该兼容性修正不改变 DHCP、恢复命令或配置行为。
 
 普通用户请下载与 Windows 原生架构匹配的平台附件：
 
