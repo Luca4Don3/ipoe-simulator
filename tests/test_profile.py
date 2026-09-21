@@ -60,6 +60,7 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(config.get("network", "unicast_routes"), [])
 
     def test_invalid_manual_unicast_route_is_rejected(self) -> None:
+        # 协议测试常量：验证组播地址不能进入程序单播路由。
         with tempfile.TemporaryDirectory() as directory:
             config = Config(Path(directory) / "config.json")
             config.set(self.mac, "device", "mac")
