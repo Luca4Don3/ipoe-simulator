@@ -24,8 +24,8 @@ class ReleasePackagingTests(unittest.TestCase):
         requirements = (
             Path(__file__).resolve().parents[1] / "requirements.txt"
         ).read_text(encoding="utf-8")
-        self.assertIn(lock["scapy"]["url"], requirements)
-        self.assertIn(lock["scapy"]["sha256"], requirements)
+        self.assertIn(f"scapy=={lock['scapy']['version']}", requirements)
+        self.assertIn(f"sha256:{lock['scapy']['sha256']}", requirements)
         for architecture in ("x86", "x64", "arm64"):
             metadata = lock["python"]["architectures"][architecture]
             self.assertIn("3.14.6", metadata["url"])
