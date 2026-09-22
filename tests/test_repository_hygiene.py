@@ -108,17 +108,31 @@ class RepositoryHygieneTests(unittest.TestCase):
             with self.subTest(pattern=pattern):
                 self.assertIn(pattern, ignore.splitlines())
 
-    def test_actions_are_pinned_and_release_has_scoped_write_access(self) -> None:
-        workflow = (ROOT / ".github/workflows/windows-release.yml").read_text(
+    def test_actions_are_pinned_and_write_access_is_scoped(self) -> None:
+        workflow_dir = ROOT / ".github" / "workflows"
+        workflow_files = sorted(workflow_dir.glob("*.yml"))
+        self.assertTrue(workflow_files)
+        for path in workflow_files:
+            with self.subTest(workflow=path.name):
+                workflow = path.read_text(encoding="utf-8")
+                action_references = re.findall(r"uses:\s*[^@\s]+@([^\s#]+)", workflow)
+                self.assertTrue(action_references)
+                self.assertTrue(
+                    all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_references)
+                )
+                self.assertIn("permissions:\n  contents: read", workflow)
+                self.assertNotIn("permissions:\n  contents: write", workflow)
+        release = (workflow_dir / "windows-release.yml").read_text(encoding="utf-8")
+        self.assertRegex(
+            release,
+            r"(?ms)^  release:.*?^    permissions:\n      contents: write$",
+        )
+        submission = (workflow_dir / "dependency-submission.yml").read_text(
             encoding="utf-8"
         )
-        action_references = re.findall(r"uses:\s*[^@\s]+@([^\s#]+)", workflow)
-        self.assertTrue(action_references)
-        self.assertTrue(all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_references))
-        self.assertIn("permissions:\n  contents: read", workflow)
         self.assertRegex(
-            workflow,
-            r"(?ms)^  release:.*?^    permissions:\n      contents: write$",
+            submission,
+            r"(?ms)^  submit:.*?^    permissions:\n      contents: write$",
         )
 
 
