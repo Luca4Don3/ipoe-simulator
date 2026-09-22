@@ -1,3 +1,13 @@
+# IPoE Simulator v0.6.1
+
+本修订版将源码安装的 Scapy 依赖声明从固定 wheel URL 改为精确版本加哈希：`requirements.txt` 现为 `scapy==2.7.0 --hash=sha256:…`。Scapy 版本号与 SHA-256 均与 `release-dependencies.json` 保持一致，制品内容未变；Windows 发布包仍按锁定清单直接下载固定 URL 的 wheel，因此随包分发行为不变，仅源码安装时的解析方式从固定 URL 改为通过已配置的包索引查找。
+
+`requirements.txt` 与 `release-dependencies.json` 的一致性由测试强制校验：Scapy 版本号与 SHA-256 必须一致。新增 `.github/dependabot.yml`，仅对 `github-actions` 生态按月检查动作版本更新；不启用 pip 自动更新，避免与自定义依赖清单不同步，也不启用自动合并。
+
+本次不改变 CLI、JSON 配置、journal schema 或三平台网络接口。本版本已完成 Windows CI、真实 Windows 10/11 网卡及 x86/x64/ARM64 实机验收。
+
+---
+
 # IPoE Simulator v0.6.0
 
 本次向后兼容的 MINOR 更新新增 ChannelList 单播静态路由。`extract_params.py` 可在所选机顶盒 MAC 的 TCP 流中有界重组非标准端口 HTTP，解析 `Content-Length`、chunked、identity 与 gzip 响应，并从明文 `Authentication.CTCSetConfig('Channel', ...)` 提取、过滤、去重最多 256 个 IPv4 单播控制端点。未检测到 ChannelList 时保留旧列表；检测到但解析不完整时原子失败；成功解析时整体替换 `network.unicast_routes`，包括合法空列表。
