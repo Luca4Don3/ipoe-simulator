@@ -1,0 +1,30 @@
+name: 文档问题
+description: 报告 README、RELEASE_NOTES 或其它项目文档中的问题
+title: "[Docs] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本项目不接受外部代码贡献，仅通过 Issue 反馈问题。
+        请勿在 Issue 中粘贴真实 PCAP/PCAPNG、配置、日志、恢复 journal、设备标识、接口详情或基础设施地址。
+  - type: input
+    id: location
+    attributes:
+      label: 文档位置
+      description: 文件路径与章节（如 README.md「运行与恢复」）
+      placeholder: README.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议修改
+      description: 可选
+    validations:
+      required: false
