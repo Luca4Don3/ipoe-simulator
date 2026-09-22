@@ -1,0 +1,27 @@
+name: Dependency submission
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - requirements.txt
+      - release-dependencies.json
+      - scripts/submit_dependencies.py
+      - .github/workflows/dependency-submission.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Submit resolved dependency graph
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/submit_dependencies.py
