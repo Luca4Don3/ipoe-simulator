@@ -4,7 +4,7 @@ IPoE Simulator 是面向授权实验网和维护网的 DHCPv4/IPoE CLI 工具，
 
 > 声明：本项目的测试环境基于特定运营商网络；其他地区或运营商环境可能存在差异，使用前请结合实际网络配置进行验证。
 
-当前正式发布版本为 `v0.6.0`。`v0.6.0` 增加从明文 ChannelList 提取单播控制端点，并在租约期间按 DHCP ACK 网关配置临时主机路由的能力。本版本已完成 Windows CI、真实网卡和三架构（x86/x64/ARM64）实机验收。
+当前正式发布版本为 `v0.6.1`。`v0.6.1` 为补丁版本：源码安装的 Scapy 依赖声明改为精确版本 `scapy==2.7.0` 加 SHA-256 哈希，版本号与哈希均与 `release-dependencies.json` 一致，制品内容不变；Windows 发布包仍按锁定清单直接下载固定 URL 的 wheel。`v0.6.0` 引入从明文 ChannelList 提取单播控制端点与租约期内临时主机路由能力。本版本已完成 Windows CI、真实网卡和三架构（x86/x64/ARM64）实机验收。
 
 项目采用 GPL-2.0-only，完整条款见 `LICENSE`。工具不会修改 IPv6，不提供 IPTV 播放、实时 EPG 登录、GUI、开机服务或断电恢复服务。
 
@@ -17,7 +17,7 @@ python3 check_env.py
 python3 check_env.py --json
 ```
 
-普通 Windows 用户应从 GitHub Release 下载与原生架构匹配的 `v0.6.0` 附件，并核对 `SHA256SUMS.txt`。源码运行的基本流程是：
+普通 Windows 用户应从 GitHub Release 下载与原生架构匹配的 `v0.6.1` 附件，并核对 `SHA256SUMS.txt`。源码运行的基本流程是：
 
 ```text
 python3 ipoedhcp.py --list-interfaces
