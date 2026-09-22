@@ -27,6 +27,7 @@ DEFAULT_API_URL = "https://api.github.com"
 SNAPSHOT_VERSION = 0
 MANIFEST_NAME = "requirements.txt"
 DETECTOR_NAME = "ipoe-simulator-release-dependencies"
+CORRELATOR = "Dependency submission-1"
 
 
 def _scapy_lock(root: Path) -> tuple[str, str]:
@@ -130,8 +131,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-url", default=os.environ.get("GITHUB_API_URL", DEFAULT_API_URL))
     parser.add_argument("--server-url", default=os.environ.get("GITHUB_SERVER_URL", "https://github.com"))
     parser.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID", "local"))
-    parser.add_argument("--run-attempt", default=os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
-    parser.add_argument("--workflow", default=os.environ.get("GITHUB_WORKFLOW", "dependency-submission"))
     parser.add_argument("--dry-run", action="store_true", help="只打印快照，不提交")
     args = parser.parse_args(argv)
 
@@ -147,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         ref=args.ref,
         job_id=args.run_id,
         job_url=job_url,
-        correlator=f"{args.workflow}-{args.run_attempt}",
+        correlator=CORRELATOR,
         detector_url=f"{args.server_url}/{args.repo}" if args.repo else args.server_url,
     )
 
