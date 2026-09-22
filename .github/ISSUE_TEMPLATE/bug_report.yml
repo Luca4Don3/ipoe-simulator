@@ -1,0 +1,59 @@
+name: Bug 反馈
+description: 报告正式 Release 或当前 main 上可复现的缺陷
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本项目不接受外部代码贡献，仅通过 Issue 反馈问题。
+        请勿提交真实 PCAP/PCAPNG、配置、日志、恢复 journal、设备标识、接口详情或基础设施地址。
+        安全问题（凭据、隐私泄露、不安全网络恢复行为）请改用私密漏洞报告，不要在本 Issue 中披露。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 正式 Release 版本号或 main 提交（如 v0.6.0 / 4f3210d）
+      placeholder: v0.6.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: Windows 11 x64
+    validations:
+      required: true
+  - type: input
+    id: arch
+    attributes:
+      label: 架构
+      placeholder: x64 / x86 / ARM64
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 使用合成数据描述最小复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 可公开的诊断信息（可选）
+      description: 仅使用合成数据；没有可安全公开的输出时请填写“无”。不要粘贴真实抓包、配置、日志或 journal。
+      placeholder: "无"
+    validations:
+      required: false

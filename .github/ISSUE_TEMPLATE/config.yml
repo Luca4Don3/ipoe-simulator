@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密漏洞报告
+    url: https://github.com/Luca4Don3/ipoe-simulator/security/advisories/new
+    about: 凭据、隐私泄露或不安全网络恢复行为请私下上报，不要提交公开 Issue。

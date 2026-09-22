@@ -89,14 +89,10 @@ class RepositoryHygieneTests(unittest.TestCase):
         self.assertEqual(violations, [])
 
     def test_repository_governance_files_exist(self) -> None:
-        for name in (
-            "SECURITY.md",
-            "CONTRIBUTING.md",
-            "CODE_OF_CONDUCT.md",
-            "SUPPORT.md",
-        ):
-            with self.subTest(name=name):
-                self.assertTrue((ROOT / name).is_file())
+        self.assertTrue((ROOT / "SECURITY.md").is_file())
+        for name in ("config.yml", "bug_report.yml", "doc_issue.yml"):
+            with self.subTest(template=name):
+                self.assertTrue((ROOT / ".github" / "ISSUE_TEMPLATE" / name).is_file())
 
     def test_sensitive_runtime_files_are_ignored(self) -> None:
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
