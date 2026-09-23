@@ -72,7 +72,9 @@ class SubmitDependenciesCorrelatorTests(unittest.TestCase):
         self.assertNotIn("-3", correlator)
 
     def test_lock_mismatch_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        temp_root = ROOT / ".temp"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="lock-mismatch-", dir=temp_root) as directory:
             broken = Path(directory)
             (broken / "release-dependencies.json").write_text(
                 (ROOT / "release-dependencies.json").read_text(encoding="utf-8"),
