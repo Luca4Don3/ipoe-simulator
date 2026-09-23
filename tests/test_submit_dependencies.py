@@ -4,6 +4,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -71,9 +72,8 @@ class SubmitDependenciesCorrelatorTests(unittest.TestCase):
         self.assertNotIn("-3", correlator)
 
     def test_lock_mismatch_is_rejected(self) -> None:
-        broken = ROOT / ".temp" / "broken-requirements-for-test"
-        broken.mkdir(parents=True, exist_ok=True)
-        try:
+        with tempfile.TemporaryDirectory() as directory:
+            broken = Path(directory)
             (broken / "release-dependencies.json").write_text(
                 (ROOT / "release-dependencies.json").read_text(encoding="utf-8"),
                 encoding="utf-8",
@@ -94,10 +94,6 @@ class SubmitDependenciesCorrelatorTests(unittest.TestCase):
                     correlator=sd.CORRELATOR,
                     detector_url="https://github.com/example/repo",
                 )
-        finally:
-            for path in broken.iterdir():
-                path.unlink()
-            broken.rmdir()
 
 
 if __name__ == "__main__":
